@@ -1,4 +1,4 @@
-# Hanzo Gateway - API Gateway
+# Hanzo Gateway - KrakenD-based API Gateway
 # Default values
 
 replicaCount: 2
@@ -6,7 +6,7 @@ replicaCount: 2
 image:
   repository: ghcr.io/hanzoai/gateway
   pullPolicy: IfNotPresent
-  tag: ""
+  tag: ""  # Defaults to KrakenD 2.6.x
 
 imagePullSecrets: []
 nameOverride: ""
@@ -19,26 +19,25 @@ serviceAccount:
 
 podAnnotations: {}
 podSecurityContext: {}
-
 securityContext: {}
 
 service:
   type: LoadBalancer
-  port: 443
+  port: 8080
   annotations:
-    service.beta.kubernetes.io/do-loadbalancer-protocol: "http2"
+    service.beta.kubernetes.io/do-loadbalancer-protocol: "http"
     service.beta.kubernetes.io/do-loadbalancer-tls-ports: "443"
 
 ingress:
-  enabled: false  # Gateway IS the ingress
+  enabled: false  # Gateway IS the ingress point
 
 resources:
   limits:
     cpu: 1000m
-    memory: 1Gi
+    memory: 512Mi
   requests:
     cpu: 200m
-    memory: 256Mi
+    memory: 128Mi
 
 autoscaling:
   enabled: true
@@ -50,51 +49,161 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# Gateway-specific configuration
-config:
-  # Upstream services
-  upstreams:
-    iam:
-      url: http://hanzo-iam:8080
-      healthCheck: /health
-    api:
-      url: http://hanzo-api:8080
-      healthCheck: /health
-    console:
-      url: http://hanzo-console:3000
-      healthCheck: /
+# KrakenD configuration
+krakend:
+  # Configuration format
+  configPath: /etc/krakend/krakend.json
 
-  # Rate limiting
-  rateLimit:
-    enabled: true
-    global:
-      requestsPerSecond: 1000
-    perIP:
-      requestsPerSecond: 100
+  # Service settings
+  port: 8080
+  timeout: 3000ms
+  cacheTTL: 300s
 
-  # CORS
-  cors:
-    enabled: true
-    allowOrigins:
-      - "https://hanzo.ai"
-      - "https://*.hanzo.ai"
-    allowMethods:
-      - GET
-      - POST
-      - PUT
-      - DELETE
-      - OPTIONS
-    allowHeaders:
-      - Authorization
-      - Content-Type
-      - X-Request-ID
+  # Extra config (merged into krakend.json)
+  extraConfig:
+    router:
+      "@comment": "Hanzo Gateway Router Config"
 
-  # TLS
+  # TLS termination (if not using ingress)
   tls:
-    enabled: true
-    minVersion: "1.2"
+    enabled: false
+    certFile: ""
+    keyFile: ""
 
-# Redis for rate limiting
+  # Debug/logging
+  debug: false
+  logLevel: "WARNING"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+# Backend services
+backends:
+  iam:
+    host: http://hanzo-iam:8080
+    healthCheck: /__health
+  api:
+    host: http://hanzo-api:8080
+    healthCheck: /__health
+  console:
+    host: http://hanzo-console:3000
+    healthCheck: /
+  commerce:
+    host: http://hanzo-commerce:8080
+    healthCheck: /__health
+  analytics:
+    host: http://hanzo-analytics:8080
+    healthCheck: /__health
+  agents:
+    host: http://hanzo-agents:8080
+    healthCheck: /__health
+
+# Endpoints configuration
+endpoints:
+  # Auth endpoints -> IAM
+  - endpoint: "/auth/{path}"
+    backend:
+      - host: "{{ .Values.backends.iam.host }}"
+        urlPattern: "/{path}"
+    inputHeaders: ["*"]
+    outputEncoding: "no-op"
+
+  # API endpoints -> Main API
+  - endpoint: "/api/v1/{path}"
+    backend:
+      - host: "{{ .Values.backends.api.host }}"
+        urlPattern: "/v1/{path}"
+    inputHeaders: ["Authorization", "Content-Type", "X-Request-ID"]
+
+  # Commerce endpoints
+  - endpoint: "/commerce/{path}"
+    backend:
+      - host: "{{ .Values.backends.commerce.host }}"
+        urlPattern: "/{path}"
+    inputHeaders: ["Authorization", "Content-Type"]
+
+  # Analytics endpoints
+  - endpoint: "/analytics/{path}"
+    backend:
+      - host: "{{ .Values.backends.analytics.host }}"
+        urlPattern: "/{path}"
+    inputHeaders: ["Authorization", "Content-Type"]
+
+  # Agent endpoints
+  - endpoint: "/agents/{path}"
+    backend:
+      - host: "{{ .Values.backends.agents.host }}"
+        urlPattern: "/{path}"
+    inputHeaders: ["Authorization", "Content-Type"]
+
+# Rate limiting
+rateLimit:
+  enabled: true
+  maxRate: 1000
+  clientMaxRate: 100
+  strategy: "ip"  # ip, header
+
+# CORS
+cors:
+  enabled: true
+  allowOrigins:
+    - "https://hanzo.ai"
+    - "https://*.hanzo.ai"
+  allowMethods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "PATCH"
+    - "OPTIONS"
+  allowHeaders:
+    - "Authorization"
+    - "Content-Type"
+    - "X-Request-ID"
+    - "X-Correlation-ID"
+  exposeHeaders:
+    - "X-Request-ID"
+  maxAge: 86400
+
+# Security
+security:
+  # JWT validation
+  jwt:
+    enabled: true
+    jwkUrl: "https://hanzo.id/.well-known/jwks.json"
+    issuer: "https://hanzo.id"
+    audience: ["hanzo-api"]
+    rolesKey: "roles"
+    cache: true
+    cacheDuration: 900
+
+  # Bot detection
+  botDetector:
+    enabled: true
+    denyList:
+      - "curl"
+      - "wget"
+    allowList:
+      - "Googlebot"
+      - "Bingbot"
+
+# Telemetry
+telemetry:
+  # OpenTelemetry
+  opentelemetry:
+    enabled: false
+    endpoint: ""
+    serviceName: "hanzo-gateway"
+
+  # Metrics (Prometheus)
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/__metrics"
+
+  # Logging
+  logging:
+    enabled: true
+    format: "json"  # json, logstash, default
+
+# Redis for rate limiting state
 redis:
   enabled: true
   auth:
@@ -104,3 +213,9 @@ redis:
     persistence:
       enabled: true
       size: 1Gi
+
+# ConfigMap for KrakenD configuration
+configMap:
+  # Set to true to use external ConfigMap
+  external: false
+  name: ""

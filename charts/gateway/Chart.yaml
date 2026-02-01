@@ -1,14 +1,15 @@
 apiVersion: v2
 name: hanzo-gateway
-description: Hanzo API Gateway - Unified API routing, rate limiting, and auth
+description: Hanzo API Gateway - High-performance API gateway (KrakenD-based)
 type: application
 version: 0.1.0
-appVersion: "1.0.0"
+appVersion: "2.6.0"
 kubeVersion: ">=1.25.0"
 home: https://hanzo.ai
 icon: https://hanzo.ai/icon.png
 sources:
   - https://github.com/hanzoai/gateway
+  - https://github.com/krakend/krakend-ce
 maintainers:
   - name: Hanzo AI
     email: ops@hanzo.ai
@@ -17,8 +18,10 @@ keywords:
   - hanzo
   - gateway
   - api
+  - krakend
   - routing
   - rate-limiting
+  - aggregation
 dependencies:
   - name: redis
     version: ">=17.0.0"
