@@ -1,25 +1,27 @@
 apiVersion: v2
-name: hanzo-gateway
-description: Hanzo Gateway - Multi-provider AI inference gateway
+name: hanzo-edge
+description: Hanzo Edge - Ultra-high performance API gateway (KrakenD-based)
 type: application
 version: 0.1.0
-appVersion: "1.0.0"
+appVersion: "2.6.0"
 kubeVersion: ">=1.25.0"
 home: https://hanzo.ai
 icon: https://hanzo.ai/icon.png
 sources:
-  - https://github.com/hanzoai/gateway
+  - https://github.com/hanzoai/edge
+  - https://github.com/krakend/krakend-ce
 maintainers:
   - name: Hanzo AI
     email: ops@hanzo.ai
     url: https://hanzo.ai
 keywords:
   - hanzo
-  - gateway
-  - inference
-  - llm
-  - ai
-  - proxy
+  - edge
+  - api
+  - krakend
+  - routing
+  - rate-limiting
+  - aggregation
 dependencies:
   - name: redis
     version: ">=17.0.0"
