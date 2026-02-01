@@ -1,96 +1,148 @@
-# Hanzo Cloud - Complete Stack Deployment
-# Default values for the umbrella chart
+# Hanzo Cloud - Multi-tenant AI Infrastructure
+# Default values
 
-global:
-  # Domain configuration
-  domain: hanzo.ai
+replicaCount: 3
 
-  # Image settings
-  imageRegistry: ghcr.io/hanzoai
-  imagePullSecrets: []
+image:
+  repository: ghcr.io/hanzoai/cloud
+  pullPolicy: IfNotPresent
+  tag: ""
 
-  # Storage class
-  storageClass: ""
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
 
-  # TLS configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8080
+  grpcPort: 9090
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: cloud.hanzo.ai
+      paths:
+        - path: /
+          pathType: Prefix
   tls:
+    - secretName: hanzo-cloud-tls
+      hosts:
+        - cloud.hanzo.ai
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+nodeSelector: {}
+tolerations: []
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - hanzo-cloud
+          topologyKey: kubernetes.io/hostname
+
+# Hanzo Cloud configuration
+config:
+  # Multi-tenancy
+  tenancy:
+    isolation: namespace  # namespace, network, cluster
+    defaultQuota:
+      cpu: "4"
+      memory: "8Gi"
+      storage: "100Gi"
+
+  # MCP Server Management
+  mcp:
     enabled: true
-    issuer: letsencrypt-prod
+    maxServersPerTenant: 50
+    defaultTimeout: 30s
+    registry:
+      url: https://registry.hanzo.ai/mcp
 
-  # Database (shared)
-  database:
-    host: ""
-    port: 5432
-    username: hanzo
-    password: ""
+  # AI Model Management
+  models:
+    enabled: true
+    providers:
+      - name: anthropic
+        enabled: true
+      - name: openai
+        enabled: true
+      - name: local
+        enabled: true
 
-  # Cache (shared)
-  cache:
-    host: ""
-    port: 6379
-    password: ""
+  # Agent Orchestration
+  agents:
+    enabled: true
+    maxConcurrent: 100
+    executionTimeout: 300s
 
-# Component toggles
-iam:
-  enabled: true
+  # Resource Scheduling
+  scheduler:
+    enabled: true
+    algorithm: binpack  # binpack, spread, random
 
-kms:
-  enabled: true
+  # Billing & Usage
+  billing:
+    enabled: true
+    provider: stripe
+    usageTracking: true
 
-mpc:
-  enabled: false
+  # API Settings
+  api:
+    rateLimit:
+      enabled: true
+      requestsPerMinute: 1000
+    cors:
+      enabled: true
+      origins:
+        - "https://*.hanzo.ai"
 
-gateway:
-  enabled: true
-
-platform:
-  enabled: false  # Use gitops instead
-
-console:
-  enabled: true
-
-commerce:
-  enabled: false
-
-analytics:
-  enabled: false
-
-storage:
-  enabled: true
-
-gitops:
-  enabled: true
-
-# Shared infrastructure
-
-# PostgreSQL (shared database)
+# Database
 postgresql:
   enabled: true
-  global:
-    postgresql:
-      auth:
-        postgresPassword: ""
-        username: hanzo
-        password: ""
+  auth:
+    username: hanzo
+    password: ""
+    database: hanzo_cloud
   primary:
     persistence:
       enabled: true
       size: 50Gi
-    initdb:
-      scripts:
-        init-databases.sql: |
-          CREATE DATABASE hanzo_iam;
-          CREATE DATABASE hanzo_kms;
-          CREATE DATABASE hanzo_commerce;
-          CREATE DATABASE hanzo_analytics;
-          CREATE DATABASE bootnode;
-          GRANT ALL PRIVILEGES ON DATABASE hanzo_iam TO hanzo;
-          GRANT ALL PRIVILEGES ON DATABASE hanzo_kms TO hanzo;
-          GRANT ALL PRIVILEGES ON DATABASE hanzo_commerce TO hanzo;
-          GRANT ALL PRIVILEGES ON DATABASE hanzo_analytics TO hanzo;
-          GRANT ALL PRIVILEGES ON DATABASE bootnode TO hanzo;
 
-# Redis (shared cache)
+# Cache
 redis:
   enabled: true
   auth:
@@ -100,29 +152,31 @@ redis:
     persistence:
       enabled: true
       size: 5Gi
-  replica:
-    replicaCount: 2
 
-# cert-manager
-certManager:
+# Message Queue
+nats:
   enabled: true
-  installCRDs: true
-
-# ingress-nginx
-ingressNginx:
-  enabled: true
-  controller:
-    service:
-      type: LoadBalancer
-      annotations:
-        service.beta.kubernetes.io/do-loadbalancer-protocol: "http"
-        service.beta.kubernetes.io/do-loadbalancer-tls-ports: "443"
-        service.beta.kubernetes.io/do-loadbalancer-certificate-id: ""
-
-# Monitoring (optional)
-monitoring:
-  enabled: false
-  prometheus:
+  cluster:
     enabled: true
-  grafana:
+    replicas: 3
+  jetstream:
     enabled: true
+    fileStore:
+      pvc:
+        size: 10Gi
+
+# External services (if not using bundled)
+externalDatabase:
+  host: ""
+  port: 5432
+  username: ""
+  password: ""
+  database: ""
+
+externalRedis:
+  host: ""
+  port: 6379
+  password: ""
+
+externalNats:
+  url: ""
