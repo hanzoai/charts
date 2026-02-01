@@ -1,0 +1,57 @@
+# Hanzo Analytics - Multi-tenant Analytics
+# Default values
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/hanzoai/analytics
+  pullPolicy: IfNotPresent
+  tag: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: analytics.hanzo.ai
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: hanzo-analytics-tls
+      hosts:
+        - analytics.hanzo.ai
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+# Analytics-specific configuration
+config:
+  # Event ingestion
+  ingestion:
+    batchSize: 1000
+    flushInterval: 5s
+
+  # Retention
+  retention:
+    rawEvents: 90  # days
+    aggregates: 365  # days
+
+clickhouse:
+  enabled: true
+  shards: 1
+  replicaCount: 1
+
+kafka:
+  enabled: true
+  replicaCount: 1

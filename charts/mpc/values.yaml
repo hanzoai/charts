@@ -1,0 +1,50 @@
+# Hanzo MPC - Multi-Party Computation
+# Default values
+
+replicaCount: 3  # Minimum for threshold
+
+image:
+  repository: ghcr.io/hanzoai/mpc
+  pullPolicy: IfNotPresent
+  tag: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: mpc.hanzo.ai
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: hanzo-mpc-tls
+      hosts:
+        - mpc.hanzo.ai
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+# MPC-specific configuration
+config:
+  # Threshold configuration (t of n)
+  threshold: 2
+  totalParties: 3
+
+  # Key generation settings
+  keyGen:
+    curve: secp256k1
+
+  # Signing settings
+  signing:
+    timeout: 30s

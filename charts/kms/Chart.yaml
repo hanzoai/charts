@@ -1,0 +1,27 @@
+apiVersion: v2
+name: hanzo-kms
+description: Hanzo Key Management Service - Secure key storage and cryptographic operations
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+kubeVersion: ">=1.25.0"
+home: https://hanzo.ai
+icon: https://hanzo.ai/icon.png
+sources:
+  - https://github.com/hanzoai/kms
+maintainers:
+  - name: Hanzo AI
+    email: ops@hanzo.ai
+    url: https://hanzo.ai
+keywords:
+  - hanzo
+  - kms
+  - keys
+  - cryptography
+  - security
+  - hsm
+dependencies:
+  - name: vault
+    version: ">=0.25.0"
+    repository: https://helm.releases.hashicorp.com
+    condition: vault.enabled

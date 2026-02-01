@@ -1,0 +1,22 @@
+apiVersion: v2
+name: hanzo-mpc
+description: Hanzo Multi-Party Computation - Threshold signatures and secure computation
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+kubeVersion: ">=1.25.0"
+home: https://hanzo.ai
+icon: https://hanzo.ai/icon.png
+sources:
+  - https://github.com/hanzoai/mpc
+maintainers:
+  - name: Hanzo AI
+    email: ops@hanzo.ai
+    url: https://hanzo.ai
+keywords:
+  - hanzo
+  - mpc
+  - threshold-signatures
+  - tss
+  - cryptography
+  - wallets

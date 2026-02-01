@@ -1,0 +1,24 @@
+apiVersion: v2
+name: hanzo-llm
+description: Hanzo LLM - Large Language Model serving infrastructure
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+kubeVersion: ">=1.25.0"
+home: https://hanzo.ai
+icon: https://hanzo.ai/icon.png
+sources:
+  - https://github.com/hanzoai/llm
+maintainers:
+  - name: Hanzo AI
+    email: ops@hanzo.ai
+    url: https://hanzo.ai
+keywords:
+  - hanzo
+  - llm
+  - ai
+  - inference
+  - vllm
+  - gpu
+annotations:
+  gpu.nvidia.com/required: "true"

@@ -1,0 +1,133 @@
+# Hanzo GitOps - Kubernetes-native CI/CD
+# Default values
+
+replicaCount: 1
+
+image:
+  platform:
+    repository: ghcr.io/hanzoai/gitops-platform
+    tag: ""
+  webhook:
+    repository: ghcr.io/hanzoai/gitops-webhook
+    tag: ""
+  monitor:
+    repository: ghcr.io/hanzoai/gitops-monitor
+    tag: ""
+  sync:
+    repository: ghcr.io/hanzoai/gitops-sync
+    tag: ""
+  studio:
+    repository: ghcr.io/hanzoai/gitops-studio
+    tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 4000
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: platform.hanzo.ai
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: hanzo-gitops-tls
+      hosts:
+        - platform.hanzo.ai
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# GitOps-specific configuration
+config:
+  # Branding
+  groupName: hanzo.ai
+  solverName: hanzo
+  releaseNumber: "v1.0.0"
+
+  # OAuth URL (leave empty for self-hosted)
+  oauthUrl: ""
+
+  # DNS API (leave empty for manual DNS)
+  dnsApiUrl: ""
+
+  # ACME domain for certificate challenges
+  acmeDomain: hanzo.ai
+
+  # Tekton settings
+  tekton:
+    namespace: tekton-pipelines
+
+  # Registry settings
+  registry:
+    enabled: true
+    type: harbor  # harbor, registry, gcr, ecr
+    url: ""
+    username: ""
+    password: ""
+
+# MongoDB
+mongodb:
+  enabled: true
+  auth:
+    rootPassword: ""
+    username: hanzo
+    password: ""
+    database: hanzo
+  persistence:
+    enabled: true
+    size: 10Gi
+
+# Redis
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: ""
+  master:
+    persistence:
+      enabled: true
+      size: 1Gi
+
+# Storage (MinIO/S3)
+minio:
+  enabled: true
+  auth:
+    rootUser: hanzo
+    rootPassword: ""
+  persistence:
+    enabled: true
+    size: 50Gi
+
+# Tekton (installed separately)
+tekton:
+  enabled: false  # Typically installed via separate chart

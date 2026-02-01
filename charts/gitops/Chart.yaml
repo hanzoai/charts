@@ -1,0 +1,34 @@
+apiVersion: v2
+name: hanzo-gitops
+description: Hanzo GitOps - Kubernetes-native CI/CD platform (Tekton-based)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+kubeVersion: ">=1.25.0"
+home: https://hanzo.ai
+icon: https://hanzo.ai/icon.png
+sources:
+  - https://github.com/hanzoai/gitops
+maintainers:
+  - name: Hanzo AI
+    email: ops@hanzo.ai
+    url: https://hanzo.ai
+keywords:
+  - hanzo
+  - gitops
+  - ci-cd
+  - tekton
+  - kubernetes
+dependencies:
+  - name: mongodb
+    version: ">=14.0.0"
+    repository: https://charts.bitnami.com/bitnami
+    condition: mongodb.enabled
+  - name: redis
+    version: ">=17.0.0"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+  - name: minio
+    version: ">=12.0.0"
+    repository: https://charts.bitnami.com/bitnami
+    condition: minio.enabled

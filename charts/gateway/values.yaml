@@ -1,0 +1,106 @@
+# Hanzo Gateway - API Gateway
+# Default values
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/hanzoai/gateway
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: LoadBalancer
+  port: 443
+  annotations:
+    service.beta.kubernetes.io/do-loadbalancer-protocol: "http2"
+    service.beta.kubernetes.io/do-loadbalancer-tls-ports: "443"
+
+ingress:
+  enabled: false  # Gateway IS the ingress
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Gateway-specific configuration
+config:
+  # Upstream services
+  upstreams:
+    iam:
+      url: http://hanzo-iam:8080
+      healthCheck: /health
+    api:
+      url: http://hanzo-api:8080
+      healthCheck: /health
+    console:
+      url: http://hanzo-console:3000
+      healthCheck: /
+
+  # Rate limiting
+  rateLimit:
+    enabled: true
+    global:
+      requestsPerSecond: 1000
+    perIP:
+      requestsPerSecond: 100
+
+  # CORS
+  cors:
+    enabled: true
+    allowOrigins:
+      - "https://hanzo.ai"
+      - "https://*.hanzo.ai"
+    allowMethods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+    allowHeaders:
+      - Authorization
+      - Content-Type
+      - X-Request-ID
+
+  # TLS
+  tls:
+    enabled: true
+    minVersion: "1.2"
+
+# Redis for rate limiting
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: ""
+  master:
+    persistence:
+      enabled: true
+      size: 1Gi

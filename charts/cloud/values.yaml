@@ -1,0 +1,128 @@
+# Hanzo Cloud - Complete Stack Deployment
+# Default values for the umbrella chart
+
+global:
+  # Domain configuration
+  domain: hanzo.ai
+
+  # Image settings
+  imageRegistry: ghcr.io/hanzoai
+  imagePullSecrets: []
+
+  # Storage class
+  storageClass: ""
+
+  # TLS configuration
+  tls:
+    enabled: true
+    issuer: letsencrypt-prod
+
+  # Database (shared)
+  database:
+    host: ""
+    port: 5432
+    username: hanzo
+    password: ""
+
+  # Cache (shared)
+  cache:
+    host: ""
+    port: 6379
+    password: ""
+
+# Component toggles
+iam:
+  enabled: true
+
+kms:
+  enabled: true
+
+mpc:
+  enabled: false
+
+gateway:
+  enabled: true
+
+platform:
+  enabled: false  # Use gitops instead
+
+console:
+  enabled: true
+
+commerce:
+  enabled: false
+
+analytics:
+  enabled: false
+
+storage:
+  enabled: true
+
+gitops:
+  enabled: true
+
+# Shared infrastructure
+
+# PostgreSQL (shared database)
+postgresql:
+  enabled: true
+  global:
+    postgresql:
+      auth:
+        postgresPassword: ""
+        username: hanzo
+        password: ""
+  primary:
+    persistence:
+      enabled: true
+      size: 50Gi
+    initdb:
+      scripts:
+        init-databases.sql: |
+          CREATE DATABASE hanzo_iam;
+          CREATE DATABASE hanzo_kms;
+          CREATE DATABASE hanzo_commerce;
+          CREATE DATABASE hanzo_analytics;
+          CREATE DATABASE bootnode;
+          GRANT ALL PRIVILEGES ON DATABASE hanzo_iam TO hanzo;
+          GRANT ALL PRIVILEGES ON DATABASE hanzo_kms TO hanzo;
+          GRANT ALL PRIVILEGES ON DATABASE hanzo_commerce TO hanzo;
+          GRANT ALL PRIVILEGES ON DATABASE hanzo_analytics TO hanzo;
+          GRANT ALL PRIVILEGES ON DATABASE bootnode TO hanzo;
+
+# Redis (shared cache)
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: ""
+  master:
+    persistence:
+      enabled: true
+      size: 5Gi
+  replica:
+    replicaCount: 2
+
+# cert-manager
+certManager:
+  enabled: true
+  installCRDs: true
+
+# ingress-nginx
+ingressNginx:
+  enabled: true
+  controller:
+    service:
+      type: LoadBalancer
+      annotations:
+        service.beta.kubernetes.io/do-loadbalancer-protocol: "http"
+        service.beta.kubernetes.io/do-loadbalancer-tls-ports: "443"
+        service.beta.kubernetes.io/do-loadbalancer-certificate-id: ""
+
+# Monitoring (optional)
+monitoring:
+  enabled: false
+  prometheus:
+    enabled: true
+  grafana:
+    enabled: true

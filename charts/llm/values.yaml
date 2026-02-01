@@ -1,0 +1,66 @@
+# Hanzo LLM - Large Language Model Serving
+# Default values
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/hanzoai/llm
+  pullPolicy: IfNotPresent
+  tag: ""
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  hosts:
+    - host: llm.hanzo.ai
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: hanzo-llm-tls
+      hosts:
+        - llm.hanzo.ai
+
+resources:
+  limits:
+    nvidia.com/gpu: 1
+    cpu: 8000m
+    memory: 32Gi
+  requests:
+    nvidia.com/gpu: 1
+    cpu: 4000m
+    memory: 16Gi
+
+nodeSelector:
+  nvidia.com/gpu.present: "true"
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+# LLM-specific configuration
+config:
+  # Model settings
+  model:
+    name: ""  # HuggingFace model ID
+    quantization: ""  # awq, gptq, none
+    maxModelLen: 8192
+
+  # Serving settings
+  serving:
+    tensorParallelSize: 1
+    maxNumSeqs: 256
+
+  # vLLM settings
+  vllm:
+    enabled: true
+    gpuMemoryUtilization: 0.9

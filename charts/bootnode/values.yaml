@@ -1,0 +1,131 @@
+# Hanzo Bootnode - Blockchain Infrastructure
+# Default values
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/hanzoai/bootnode
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: api.bootnode.dev
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: bootnode-api-tls
+      hosts:
+        - api.bootnode.dev
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 200m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Bootnode-specific configuration
+config:
+  # Supported chains
+  chains:
+    ethereum:
+      enabled: true
+      rpcUrl: ""
+      wsUrl: ""
+    polygon:
+      enabled: true
+      rpcUrl: ""
+      wsUrl: ""
+    arbitrum:
+      enabled: true
+      rpcUrl: ""
+      wsUrl: ""
+    base:
+      enabled: true
+      rpcUrl: ""
+      wsUrl: ""
+    lux:
+      enabled: true
+      rpcUrl: ""
+      wsUrl: ""
+
+  # Wallet services
+  wallets:
+    enabled: true
+    hdPath: "m/44'/60'/0'/0"
+
+  # Gas estimation
+  gas:
+    enabled: true
+    buffer: 1.2  # 20% buffer
+
+  # Bundler (ERC-4337)
+  bundler:
+    enabled: true
+    entryPoint: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+
+  # NFT services
+  nfts:
+    enabled: true
+    ipfsGateway: https://ipfs.io/ipfs/
+
+# Database
+postgresql:
+  enabled: true
+  auth:
+    username: hanzo
+    password: ""
+    database: bootnode
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+
+# Cache
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: ""
+  master:
+    persistence:
+      enabled: true
+      size: 2Gi

@@ -1,0 +1,61 @@
+apiVersion: v2
+name: hanzo-cloud
+description: Hanzo Cloud - Complete Hanzo stack deployment
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+kubeVersion: ">=1.25.0"
+home: https://hanzo.ai
+icon: https://hanzo.ai/icon.png
+sources:
+  - https://github.com/hanzoai/cloud
+maintainers:
+  - name: Hanzo AI
+    email: ops@hanzo.ai
+    url: https://hanzo.ai
+keywords:
+  - hanzo
+  - cloud
+  - full-stack
+  - operator
+dependencies:
+  - name: hanzo-iam
+    version: ">=0.1.0"
+    repository: file://../iam
+    condition: iam.enabled
+  - name: hanzo-kms
+    version: ">=0.1.0"
+    repository: file://../kms
+    condition: kms.enabled
+  - name: hanzo-mpc
+    version: ">=0.1.0"
+    repository: file://../mpc
+    condition: mpc.enabled
+  - name: hanzo-gateway
+    version: ">=0.1.0"
+    repository: file://../gateway
+    condition: gateway.enabled
+  - name: hanzo-platform
+    version: ">=0.1.0"
+    repository: file://../platform
+    condition: platform.enabled
+  - name: hanzo-console
+    version: ">=0.1.0"
+    repository: file://../console
+    condition: console.enabled
+  - name: hanzo-commerce
+    version: ">=0.1.0"
+    repository: file://../commerce
+    condition: commerce.enabled
+  - name: hanzo-analytics
+    version: ">=0.1.0"
+    repository: file://../analytics
+    condition: analytics.enabled
+  - name: hanzo-storage
+    version: ">=0.1.0"
+    repository: file://../storage
+    condition: storage.enabled
+  - name: hanzo-gitops
+    version: ">=0.1.0"
+    repository: file://../gitops
+    condition: gitops.enabled
