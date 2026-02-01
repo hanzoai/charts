@@ -44,7 +44,6 @@ Official Helm charts for all Hanzo services and infrastructure.
 | Repo | Description |
 |------|-------------|
 | [hanzoai/stack](https://github.com/hanzoai/stack) | Full local stack (docker-compose) |
-| [hanzoai/universe](https://github.com/hanzoai/universe) | Production infrastructure (private) |
 
 ## Installation
 
