@@ -1,0 +1,24 @@
+# Zoo Web3 - Brand Override
+brand: zoo
+domain: web3.zoo.ngo
+
+web:
+  env:
+    NEXT_PUBLIC_BRAND: zoo
+    NEXT_PUBLIC_API_URL: https://api.web3.zoo.ngo
+    NEXT_PUBLIC_WS_URL: wss://ws.web3.zoo.ngo
+    NEXT_PUBLIC_IAM_URL: https://zoo.id
+    NEXT_PUBLIC_IAM_CLIENT_ID: zoo-web3
+    NEXT_PUBLIC_IAM_DOMAIN: zoo.id
+
+ingress:
+  hosts:
+    web: web3.zoo.ngo
+    api: api.web3.zoo.ngo
+    ws: ws.web3.zoo.ngo
+  tls:
+    secretName: zoo-web3-tls
+
+iam:
+  url: https://zoo.id
+  org: ZOO

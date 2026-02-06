@@ -1,0 +1,24 @@
+# Pars Web3 - Brand Override
+brand: pars
+domain: web3.pars.id
+
+web:
+  env:
+    NEXT_PUBLIC_BRAND: pars
+    NEXT_PUBLIC_API_URL: https://api.web3.pars.id
+    NEXT_PUBLIC_WS_URL: wss://ws.web3.pars.id
+    NEXT_PUBLIC_IAM_URL: https://pars.id
+    NEXT_PUBLIC_IAM_CLIENT_ID: pars-web3
+    NEXT_PUBLIC_IAM_DOMAIN: pars.id
+
+ingress:
+  hosts:
+    web: web3.pars.id
+    api: api.web3.pars.id
+    ws: ws.web3.pars.id
+  tls:
+    secretName: pars-web3-tls
+
+iam:
+  url: https://pars.id
+  org: PARS

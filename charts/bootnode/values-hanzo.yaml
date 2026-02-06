@@ -1,0 +1,24 @@
+# Hanzo Web3 - Brand Override
+brand: hanzo
+domain: web3.hanzo.ai
+
+web:
+  env:
+    NEXT_PUBLIC_BRAND: hanzo
+    NEXT_PUBLIC_API_URL: https://api.web3.hanzo.ai
+    NEXT_PUBLIC_WS_URL: wss://ws.web3.hanzo.ai
+    NEXT_PUBLIC_IAM_URL: https://hanzo.id
+    NEXT_PUBLIC_IAM_CLIENT_ID: hanzo-web3
+    NEXT_PUBLIC_IAM_DOMAIN: hanzo.id
+
+ingress:
+  hosts:
+    web: web3.hanzo.ai
+    api: api.web3.hanzo.ai
+    ws: ws.web3.hanzo.ai
+  tls:
+    secretName: hanzo-web3-tls
+
+iam:
+  url: https://hanzo.id
+  org: HANZO

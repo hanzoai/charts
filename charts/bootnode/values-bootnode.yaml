@@ -1,0 +1,24 @@
+# Bootnode - Brand Override
+brand: bootnode
+domain: bootno.de
+
+web:
+  env:
+    NEXT_PUBLIC_BRAND: bootnode
+    NEXT_PUBLIC_API_URL: https://api.bootno.de
+    NEXT_PUBLIC_WS_URL: wss://ws.bootno.de
+    NEXT_PUBLIC_IAM_URL: https://iam.bootno.de
+    NEXT_PUBLIC_IAM_CLIENT_ID: bootnode-web
+    NEXT_PUBLIC_IAM_DOMAIN: iam.bootno.de
+
+ingress:
+  hosts:
+    web: bootno.de
+    api: api.bootno.de
+    ws: ws.bootno.de
+  tls:
+    secretName: bootnode-tls
+
+iam:
+  url: https://iam.bootno.de
+  org: BOOTNODE

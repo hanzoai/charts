@@ -1,0 +1,30 @@
+# Lux Web3 - Brand Override
+brand: lux
+domain: web3.lux.network
+
+web:
+  env:
+    NEXT_PUBLIC_BRAND: lux
+    NEXT_PUBLIC_API_URL: https://api.web3.lux.network
+    NEXT_PUBLIC_WS_URL: wss://ws.web3.lux.network
+    NEXT_PUBLIC_IAM_URL: https://lux.id
+    NEXT_PUBLIC_IAM_CLIENT_ID: lux-web3
+    NEXT_PUBLIC_IAM_DOMAIN: lux.id
+
+ingress:
+  hosts:
+    web: web3.lux.network
+    api: api.web3.lux.network
+    ws: ws.web3.lux.network
+  tls:
+    secretName: lux-web3-tls
+
+iam:
+  url: https://lux.id
+  org: LUX
+
+chains:
+  lux:
+    enabled: true
+    rpcUrl: https://api.lux.network/rpc
+    wsUrl: wss://api.lux.network/ws
