@@ -5,6 +5,15 @@
 brand: hanzo  # hanzo or bootnode
 domain: web3.hanzo.ai
 
+# Service Account
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Image pull secrets
+imagePullSecrets: []
+
 # API Service
 api:
   enabled: true
@@ -14,6 +23,9 @@ api:
     tag: api-latest
     pullPolicy: Always
   port: 8000
+  service:
+    type: ClusterIP
+    port: 80
   resources:
     requests:
       cpu: 500m
@@ -25,11 +37,9 @@ api:
     enabled: true
     minReplicas: 3
     maxReplicas: 20
-    targetCPUUtilization: 70
-    targetMemoryUtilization: 80
-  serviceAccount:
-    create: true
-    name: bootnode-api
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  env: {}
 
 # Web Frontend
 web:
@@ -40,6 +50,9 @@ web:
     tag: web-latest
     pullPolicy: Always
   port: 3001
+  service:
+    type: ClusterIP
+    port: 80
   resources:
     requests:
       cpu: 100m
@@ -51,7 +64,7 @@ web:
     enabled: true
     minReplicas: 2
     maxReplicas: 10
-    targetCPUUtilization: 70
+    targetCPUUtilizationPercentage: 70
   env:
     NODE_ENV: production
     NEXT_PUBLIC_BRAND: hanzo

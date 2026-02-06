@@ -1,8 +1,8 @@
 apiVersion: v2
 name: hanzo-bootnode
-description: Hanzo Bootnode - Blockchain node infrastructure and wallet services
+description: Hanzo Bootnode - Multi-brand Web3 platform with HPA autoscaling
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "1.0.0"
 kubeVersion: ">=1.25.0"
 home: https://hanzo.ai
