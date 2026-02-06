@@ -1,0 +1,58 @@
+apiVersion: v1
+entries:
+  hanzo-bootnode:
+  - apiVersion: v2
+    appVersion: "1.0.0"
+    created: "2026-02-06T06:09:10Z"
+    description: Hanzo Bootnode - Multi-brand Web3 platform with HPA autoscaling
+    digest: ""
+    name: hanzo-bootnode
+    type: application
+    urls:
+    - https://github.com/hanzoai/charts/releases/download/hanzo-bootnode-0.1.0/hanzo-bootnode-0.1.0.tgz
+    version: 0.1.0
+  hanzo-cloud:
+  - apiVersion: v2
+    appVersion: "1.0.0"
+    created: "2026-02-06T06:09:11Z"
+    description: Hanzo Cloud - Multi-tenant AI infrastructure and MCP management platform
+    digest: ""
+    name: hanzo-cloud
+    type: application
+    urls:
+    - https://github.com/hanzoai/charts/releases/download/hanzo-cloud-0.1.0/hanzo-cloud-0.1.0.tgz
+    version: 0.1.0
+  hanzo-console:
+  - apiVersion: v2
+    appVersion: "1.0.0"
+    created: "2026-02-06T06:09:12Z"
+    description: Hanzo Console - Unified admin dashboard and developer console
+    digest: ""
+    name: hanzo-console
+    type: application
+    urls:
+    - https://github.com/hanzoai/charts/releases/download/hanzo-console-0.1.0/hanzo-console-0.1.0.tgz
+    version: 0.1.0
+  hanzo-edge:
+  - apiVersion: v2
+    appVersion: "1.0.0"
+    created: "2026-02-06T06:09:13Z"
+    description: Hanzo Edge - Edge inference and caching layer for AI models
+    digest: ""
+    name: hanzo-edge
+    type: application
+    urls:
+    - https://github.com/hanzoai/charts/releases/download/hanzo-edge-0.1.0/hanzo-edge-0.1.0.tgz
+    version: 0.1.0
+  hanzo-gateway:
+  - apiVersion: v2
+    appVersion: "1.0.0"
+    created: "2026-02-06T06:09:14Z"
+    description: Hanzo Gateway - Unified API gateway and LLM proxy
+    digest: ""
+    name: hanzo-gateway
+    type: application
+    urls:
+    - https://github.com/hanzoai/charts/releases/download/hanzo-gateway-0.1.0/hanzo-gateway-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-02-06T06:10:00Z"
