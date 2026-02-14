@@ -75,6 +75,12 @@ spec:
               value: "openid email profile"
             - name: AUTH_CUSTOM_ALLOW_ACCOUNT_LINKING
               value: "true"
+            - name: HANZO_INIT_ORG_IDS
+              value: "hanzo,lux,zoo,pars"
+            - name: HANZO_INIT_ORG_NAMES
+              value: "Hanzo,Lux,Zoo,Pars"
+            - name: HANZO_INIT_USER_EMAIL
+              value: "z@hanzo.ai"
 
             # Database
             - name: DATABASE_URL
