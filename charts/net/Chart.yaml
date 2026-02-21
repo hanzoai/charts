@@ -1,0 +1,22 @@
+apiVersion: v2
+name: hanzo-net
+description: Hanzo Zero Trust — zero-trust networking mesh for Hanzo AI Cloud
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+kubeVersion: ">=1.25.0"
+home: https://hanzo.ai
+icon: https://hanzo.ai/icon.png
+sources:
+  - https://github.com/hanzozt/zt
+maintainers:
+  - name: Hanzo AI
+    email: ops@hanzo.ai
+    url: https://hanzo.ai
+keywords:
+  - hanzo
+  - zero-trust
+  - networking
+  - mesh
+  - zt
+  - overlay

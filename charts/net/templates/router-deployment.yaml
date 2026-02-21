@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hanzo-net.router.fullname" . }}
+  labels:
+    {{- include "hanzo-net.labels" . | nindent 4 }}
+    app.kubernetes.io/component: router
+spec:
+  replicas: {{ .Values.router.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "hanzo-net.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: router
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "hanzo-net.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: router
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "hanzo-net.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: router
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.router.image.repository }}:{{ .Values.router.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.router.image.pullPolicy }}
+          ports:
+            - name: edge
+              containerPort: {{ .Values.router.service.port }}
+              protocol: TCP
+            - name: transport
+              containerPort: {{ .Values.router.service.transportPort }}
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: edge
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: edge
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          env:
+            - name: ZITI_CTRL_ENDPOINT
+              value: {{ include "hanzo-net.controller.endpoint" . | quote }}
+            - name: ZITI_ROUTER_MODE
+              value: {{ .Values.router.mode | quote }}
+            {{- if .Values.router.enrollment.enabled }}
+            - name: ZITI_ENROLL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "hanzo-net.router.fullname" . }}-enrollment
+                  key: token
+                  optional: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.router.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,151 @@
+# Hanzo Zero Trust — Network Mesh
+# Deploys a ZT controller + router(s) + console for zero-trust overlay networking.
+#
+# Domains:
+#   zt.hanzo.ai          — Console (management UI)
+#   zt-api.hanzo.ai      — Controller edge API
+#   zerotrust.hanzo.ai   — Landing page (external)
+
+# ---------- Controller ----------
+controller:
+  replicaCount: 1
+
+  image:
+    repository: hanzozt/zt-controller
+    pullPolicy: IfNotPresent
+    tag: ""
+
+  service:
+    type: ClusterIP
+    port: 1280
+    mgmtPort: 6262
+
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+    hosts:
+      - host: zt-api.hanzo.ai
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: hanzo-zt-api-tls
+        hosts:
+          - zt-api.hanzo.ai
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 2Gi
+
+  # Controller config injected as ConfigMap
+  config:
+    # Trust domain for identities
+    trustDomain: hanzo.ai
+    # Edge API advertise address
+    edgeApiHost: zt-api.hanzo.ai
+    edgeApiPort: 1280
+
+# ---------- Router ----------
+router:
+  replicaCount: 2
+
+  image:
+    repository: hanzozt/zt-router
+    pullPolicy: IfNotPresent
+    tag: ""
+
+  service:
+    type: ClusterIP
+    port: 3022
+    transportPort: 10080
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+
+  # Router mode: host, tproxy, or none
+  mode: host
+
+  # Auto-enroll routers with the controller
+  enrollment:
+    enabled: true
+    # Controller endpoint (auto-discovered if in same release)
+    controllerEndpoint: ""
+
+# ---------- Console ----------
+console:
+  enabled: true
+
+  image:
+    repository: hanzozt/zt-console
+    pullPolicy: IfNotPresent
+    tag: ""
+
+  service:
+    type: ClusterIP
+    port: 1408
+
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: zt.hanzo.ai
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: hanzo-zt-console-tls
+        hosts:
+          - zt.hanzo.ai
+
+# ---------- Shared ----------
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 2171
+  runAsNonRoot: true
+  runAsUser: 2171
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop: [ALL]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70

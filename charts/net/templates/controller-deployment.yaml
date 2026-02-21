@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hanzo-net.controller.fullname" . }}
+  labels:
+    {{- include "hanzo-net.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+spec:
+  replicas: {{ .Values.controller.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "hanzo-net.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: controller
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "hanzo-net.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: controller
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "hanzo-net.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: controller
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.controller.image.repository }}:{{ .Values.controller.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.controller.image.pullPolicy }}
+          ports:
+            - name: edge
+              containerPort: {{ .Values.controller.service.port }}
+              protocol: TCP
+            - name: mgmt
+              containerPort: {{ .Values.controller.service.mgmtPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /edge/client/v1/version
+              port: edge
+              scheme: HTTPS
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /edge/client/v1/version
+              port: edge
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          env:
+            - name: ZITI_CTRL_ADVERTISED_HOST
+              value: {{ .Values.controller.config.edgeApiHost | quote }}
+            - name: ZITI_CTRL_ADVERTISED_PORT
+              value: {{ .Values.controller.config.edgeApiPort | quote }}
+            - name: ZITI_TRUST_DOMAIN
+              value: {{ .Values.controller.config.trustDomain | quote }}
+          volumeMounts:
+            - name: data
+              mountPath: /persistent
+          resources:
+            {{- toYaml .Values.controller.resources | nindent 12 }}
+      volumes:
+        - name: data
+          {{- if .Values.controller.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "hanzo-net.controller.fullname" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
