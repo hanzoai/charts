@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "hanzo-mpc.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "hanzo-mpc.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  serviceName: {{ include "hanzo-mpc.fullname" . }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "hanzo-mpc.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "hanzo-mpc.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["hanzo-mpc", "start", "--name", "$(NODE_NAME)", "--config", "/app/config.yaml"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- range .Values.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+          ports:
+            - name: api
+              containerPort: {{ .Values.config.apiPort | default 8080 }}
+              protocol: TCP
+            - name: mpc
+              containerPort: 6000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: api
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data/mpc
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hanzo-mpc.fullname" . }}-config
+data:
+  config.yaml: |
+    nats:
+      url: nats://nats.hanzo.svc:4222
+    consul:
+      address: consul.hanzo.svc:8500
+    mpc_threshold: {{ .Values.config.threshold }}
+    environment: mainnet
+    api_port: {{ .Values.config.apiPort | default 8080 }}
+    iam_endpoint: {{ .Values.config.iamEndpoint | default "https://hanzo.id" | quote }}
+    backup_enabled: true
+    backup_period_seconds: 300
