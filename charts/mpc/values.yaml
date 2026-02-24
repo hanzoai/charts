@@ -6,7 +6,7 @@ replicaCount: 3  # Minimum for threshold
 image:
   repository: ghcr.io/hanzoai/mpc
   pullPolicy: IfNotPresent
-  tag: ""
+  tag: "latest"
 
 service:
   type: ClusterIP
@@ -48,6 +48,9 @@ config:
   # Signing settings
   signing:
     timeout: 30s
+
+  # Event initiator public key (hex) - used to verify NATS event signatures
+  eventInitiatorPubkey: "fc73ff7d77ed8f8ad69aa1b0b24ed25963996ccdca0c05906e9419dc56155f6c"
 
   # HTTP API server
   apiPort: 8080
