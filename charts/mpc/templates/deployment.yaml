@@ -18,16 +18,23 @@ spec:
         app.kubernetes.io/name: {{ include "hanzo-mpc.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      imagePullSecrets:
+        - name: ghcr-secret
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["hanzo-mpc", "start", "--name", "$(NODE_NAME)", "--config", "/app/config.yaml"]
+          command: ["hanzo-mpc", "start", "--name", "$(NODE_NAME)"]
           env:
             - name: NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: BADGER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hanzo-mpc-secrets
+                  key: badger-password
             {{- range .Values.env }}
             - name: {{ .name }}
               value: {{ .value | quote }}
@@ -59,6 +66,24 @@ spec:
             - name: config
               mountPath: /app/config.yaml
               subPath: config.yaml
+            - name: identity
+              mountPath: /app/identity
+              readOnly: true
+            - name: peers
+              mountPath: /app/peers.json
+              subPath: peers.json
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "hanzo-mpc.fullname" . }}-config
+        - name: identity
+          secret:
+            secretName: hanzo-mpc-identity
+            defaultMode: 0400
+        - name: peers
+          configMap:
+            name: hanzo-mpc-peers
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -75,12 +100,13 @@ metadata:
 data:
   config.yaml: |
     nats:
-      url: nats://nats.hanzo.svc:4222
+      url: nats://nats.hanzo.svc.cluster.local:4222
     consul:
-      address: consul.hanzo.svc:8500
+      address: consul-server.hanzo.svc.cluster.local:8500
     mpc_threshold: {{ .Values.config.threshold }}
     environment: mainnet
     api_port: {{ .Values.config.apiPort | default 8080 }}
     iam_endpoint: {{ .Values.config.iamEndpoint | default "https://hanzo.id" | quote }}
+    event_initiator_pubkey: {{ .Values.config.eventInitiatorPubkey | quote }}
     backup_enabled: true
     backup_period_seconds: 300
