@@ -48,3 +48,15 @@ config:
   # Signing settings
   signing:
     timeout: 30s
+
+  # HTTP API server
+  apiPort: 8080
+
+  # Hanzo IAM endpoint for unified auth (validates bearer tokens)
+  iamEndpoint: "https://hanzo.id"
+
+env:
+  - name: HANZO_MPC_IAM_ENDPOINT
+    value: "https://hanzo.id"
+  - name: HANZO_MPC_API_PORT
+    value: "8080"
