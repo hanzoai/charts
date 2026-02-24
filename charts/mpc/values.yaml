@@ -5,7 +5,7 @@ replicaCount: 3  # Minimum for threshold
 
 image:
   repository: ghcr.io/hanzoai/mpc
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
   tag: "latest"
 
 service:
