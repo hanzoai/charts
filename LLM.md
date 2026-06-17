@@ -1,4 +1,4 @@
-# charts — AI Assistant Context
+# charts
 
 # Hanzo Helm Charts
 
