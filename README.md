@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/hero.svg" alt="charts" width="880"></p>
+
 # Hanzo Helm Charts
 
 Official Helm charts for all Hanzo services and infrastructure.
