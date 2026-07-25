@@ -167,7 +167,7 @@ security:
   # JWT validation
   jwt:
     enabled: true
-    jwkUrl: "https://hanzo.id/.well-known/jwks.json"
+    jwkUrl: "https://hanzo.id/v1/iam/.well-known/jwks"
     issuer: "https://hanzo.id"
     audience: ["hanzo-api"]
     rolesKey: "roles"
