@@ -2,7 +2,7 @@ apiVersion: v2
 name: hanzo-gitops
 description: Hanzo GitOps - Kubernetes-native CI/CD platform (Tekton-based)
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: "1.0.0"
 kubeVersion: ">=1.25.0"
 home: https://hanzo.ai
@@ -28,7 +28,3 @@ dependencies:
     version: ">=17.0.0"
     repository: https://charts.bitnami.com/bitnami
     condition: redis.enabled
-  - name: minio
-    version: ">=12.0.0"
-    repository: https://charts.bitnami.com/bitnami
-    condition: minio.enabled
