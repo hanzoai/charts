@@ -118,15 +118,11 @@ redis:
       enabled: true
       size: 1Gi
 
-# Storage (MinIO/S3)
-minio:
-  enabled: true
-  auth:
-    rootUser: hanzo
-    rootPassword: ""
-  persistence:
-    enabled: true
-    size: 50Gi
+# Object storage: the cluster's S3 service (hanzoai/s3). Credentials come from
+# the s3-credentials secret; this chart does not stand up a store of its own.
+s3:
+  endpoint: http://s3.hanzo.svc:9000
+  credentialsSecret: s3-credentials
 
 # Tekton (installed separately)
 tekton:
