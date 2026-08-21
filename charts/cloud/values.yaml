@@ -89,8 +89,6 @@ config:
     enabled: true
     maxServersPerTenant: 50
     defaultTimeout: 30s
-    registry:
-      url: https://registry.hanzo.ai/mcp
 
   # AI Model Management
   models:
