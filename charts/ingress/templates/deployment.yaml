@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+      annotations:
+        # A file-provider change reaches each replica when ITS kubelet syncs the
+        # mount, and the replicas sit on different nodes — measured minutes apart,
+        # during which the estate serves two route tables and which one answers is
+        # per request. Hashing the config into the pod template makes a routing
+        # change a rollout, so the fleet converges instead of drifting.
+        checksum/routes: {{ .Values.providers.file.configMap | sha256sum | trunc 16 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name | default .Release.Name }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: ingress
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            {{- if .Values.providers.kubernetesIngress.enabled }}
+            - --providers.kubernetesingress=true
+            - --providers.kubernetesingress.ingressclass={{ .Values.providers.kubernetesIngress.ingressClass }}
+            - --providers.kubernetesingress.allowemptyservices={{ .Values.providers.kubernetesIngress.allowEmptyServices }}
+            - --providers.kubernetesingress.allowexternalnameservices={{ .Values.providers.kubernetesIngress.allowExternalNameServices }}
+            {{- end }}
+            {{- if .Values.providers.kubernetesCRD.enabled }}
+            - --providers.kubernetescrd=true
+            {{- end }}
+            {{- if .Values.providers.gateway.enabled }}
+            - --providers.kubernetesgateway=true
+            {{- end }}
+            {{- if .Values.providers.file.enabled }}
+            - --providers.file.directory=/etc/traefik/dynamic
+            # Without watch, a ConfigMap edit needs a restart to apply — and a
+            # restart is what re-issues certificates. Watch keeps the two apart.
+            - --providers.file.watch=true
+            {{- end }}
+            - --entrypoints.web.address=:{{ .Values.entryPoints.web.port }}
+            {{- if .Values.entryPoints.web.redirectTo }}
+            - --entrypoints.web.http.redirections.entrypoint.to=:{{ .Values.entryPoints.websecure.port }}
+            - --entrypoints.web.http.redirections.entrypoint.scheme=https
+            - --entrypoints.web.http.redirections.entrypoint.permanent=true
+            {{- end }}
+            - --entrypoints.websecure.address=:{{ .Values.entryPoints.websecure.port }}
+            - --entrypoints.websecure.http.tls={{ .Values.entryPoints.websecure.tls }}
+            - --ping=true
+            - --ping.entryPoint=web
+            {{- if .Values.dashboard.enabled }}
+            - --api.dashboard=true
+            - --api.insecure={{ .Values.dashboard.insecure }}
+            {{- end }}
+            - --log.level={{ .Values.log.level }}
+            - --accesslog={{ .Values.log.accessLog }}
+          ports:
+            - name: web
+              containerPort: {{ .Values.entryPoints.web.port }}
+            - name: websecure
+              containerPort: {{ .Values.entryPoints.websecure.port }}
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: web
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            {{- if .Values.providers.file.enabled }}
+            - name: dynamic-config
+              mountPath: /etc/traefik/dynamic
+            {{- end }}
+            {{- if .Values.sites.enabled }}
+            # The static plane: one edge, unlimited sites, no pod per site.
+            - name: sites
+              mountPath: {{ .Values.sites.mountPath }}
+              readOnly: true
+            {{- end }}
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        {{- if .Values.providers.file.enabled }}
+        - name: dynamic-config
+          configMap:
+            name: {{ .Values.providers.file.configMap }}
+        {{- end }}
+        {{- if .Values.sites.enabled }}
+        - name: sites
+          hostPath:
+            path: {{ .Values.sites.hostPath }}
+            type: DirectoryOrCreate
+        {{- end }}

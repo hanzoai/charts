@@ -1,0 +1,90 @@
+# Defaults are what the hanzo edge runs today, read off the live Deployment so
+# that installing this chart is a no-op rather than a surprise.
+
+image:
+  repository: ghcr.io/hanzoai/ingress
+  tag: "1.10.6"
+  pullPolicy: IfNotPresent
+
+replicas: 2
+
+# WHICH ROUTING MECHANISMS ARE ON.
+#
+# Today two are: Kubernetes Ingress objects, and a file provider holding the
+# static-site routes. Two mechanisms means a host can be claimed twice, and
+# Traefik breaks that tie on RULE LENGTH — so the loser silently 503s against a
+# service that may not exist. That has already happened here.
+#
+# `gateway` is the way out and the modern answer: Gateway API is the successor
+# to Ingress, it is vendor-neutral, and this binary already speaks it. It is
+# OFF by default because turning it on is a migration (every Ingress becomes an
+# HTTPRoute), not a flag — but it is the one that should eventually be alone.
+providers:
+  kubernetesIngress:
+    enabled: true
+    ingressClass: ingress
+    allowEmptyServices: true       # staticFiles answers terminally; no backend
+    allowExternalNameServices: true
+  file:
+    enabled: true
+    configMap: ingress-dynamic     # static-site routers + host-backed services
+  kubernetesCRD:
+    enabled: false                 # IngressRoute/Middleware CRDs — not installed
+  gateway:
+    enabled: false                 # Gateway API — supported, not yet adopted
+
+entryPoints:
+  web:
+    port: 80
+    redirectTo: websecure          # a plaintext hop is not a service we offer
+  websecure:
+    port: 443
+    tls: true
+
+# The ACME store is node-local by default upstream, which is why a rollout can
+# re-issue from empty and 525 every host that has no Secret-backed certificate.
+# Prefer certificates as Secrets (cert-manager, or a CF origin wildcard) and
+# leave the resolver off; see the ACME notes in universe.
+acme:
+  enabled: false
+
+# Bundles served from disk by the staticFiles middleware. A site is files; the
+# per-site Deployment that used to front them was the accident.
+sites:
+  enabled: true
+  hostPath: /var/lib/hanzo-sites
+  mountPath: /var/www
+
+service:
+  type: LoadBalancer
+  ports:
+    web: 80
+    websecure: 443
+
+# The edge must be reachable on every node it can be scheduled to; on a mixed
+# cluster that means naming the arch whose images exist.
+nodeSelector: {}
+tolerations: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "2"
+    memory: 1Gi
+
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+  name: ""
+
+dashboard:
+  enabled: true
+  insecure: false
+
+log:
+  level: INFO
+  accessLog: true

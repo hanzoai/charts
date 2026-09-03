@@ -1,0 +1,21 @@
+# The edge, as a chart.
+#
+# Traefik ships `traefik-helm-chart` for exactly this reason: the proxy is the
+# one workload every other workload depends on, so it is the last thing that
+# should be a hand-edited Deployment nobody can reproduce. Ours was — 40+
+# services deploy from `app` while the ingress in front of them did not.
+#
+# One chart, values per org. hanzo, lux and zoo run the SAME edge and differ
+# only in what they route, which is what makes an incident on one debuggable
+# from experience with another.
+apiVersion: v2
+name: ingress
+description: The Hanzo edge — hanzoai/ingress, deployed the way everything else is
+type: application
+version: 0.1.0
+appVersion: "1.10.6"
+keywords:
+  - edge
+  - proxy
+  - gateway
+home: https://github.com/hanzoai/ingress
