@@ -1,0 +1,41 @@
+# Release names that already have an owner.
+#
+# Each line is an image reference PATTERN — a repository suffix, then the tag
+# shape — that exactly ONE pipeline is allowed to mint. Today that is
+# hanzoai/cloud: the `image` job of its .hanzo/workflows/cicd.yml claims
+# refs/tags/v<N> as a compare-and-swap BEFORE it builds, smokes the bytes it
+# built, and pins them here itself through pin.sh. Nothing else hands that name
+# out, so nothing may be DEPLOYED under it that the owner did not mint.
+#
+# WHY THIS FILE EXISTS. Nothing else covers a hand-pinned image reaching
+# production. pipeline-only-releases.yaml governs PUBLISHING a v* name, not
+# pinning a sha- one; pins.py objects in CI, and CI is not what deploys. So a
+# sha- tag written by hand into a values file renders and rolls out, carrying
+# bytes no pipeline minted, smoked or claimed.
+#
+# TWO READERS, ONE FACT.
+#
+#   templates/_helpers.tpl (app.image) refuses to RENDER a pin for one of these
+#     repositories unless it names a release and carries a digest. The image
+#     reference is formed in exactly one place, so a values file carrying a sha
+#     produces no Deployment at all — on a workstation, in universe CI, and at
+#     cd.hanzo.ai alike. Production keeps serving the release it was last given,
+#     and the Application says in one sentence why it stopped.
+#
+#   scripts/ci/pins.py refuses to HOLD one of these on the legacy ratchet — a
+#     lane that mints versions is never "not yet able to" — and, with --resolve,
+#     refuses a pin whose bytes cannot name the commit they were built from. The
+#     chart can ask a registry nothing; that read is what catches a v-tag some
+#     other lane published back when it still could, which is exactly how
+#     production came to report {"revision":"unknown"} about itself.
+#
+# A THIRD reader cannot read this file. pipeline-only-releases.yaml is a
+# ValidatingAdmissionPolicy and CEL has no filesystem, so its `claimed` variable
+# holds these same strings inline — and pins.py asserts the two agree character
+# for character. One fact, one place, with a proof rather than a convention.
+#
+# Adding a repository here is DATA, one line, and it asserts that the name now
+# has an owner. It is the last step of giving a repo a release lane, never the
+# first: a repo whose builds cannot yet mint a version belongs in pins.py's
+# LEGACY ratchet instead, which is a queue to be emptied rather than a claim.
+/hanzoai/cloud:v[0-9]+[.][0-9]+[.][0-9]+

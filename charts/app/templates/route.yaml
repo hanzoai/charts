@@ -1,0 +1,60 @@
+{{/*
+Traefik routing, for the services a plain Ingress cannot describe.
+
+`ingress:` covers the ordinary case — a host, a TLS certificate, a backend — and
+almost every service in the fleet needs nothing more. These two kinds exist for
+the cases it genuinely cannot express: rule PRIORITY between two routers that
+match the same host, and MIDDLEWARE (a redirect, a rewrite, a rate limit) in
+front of a backend. Without them a service like `sign` cannot move off the App
+CRD at all, because its whole behaviour — sign.hanzo.ai permanently answering as
+esign.hanzo.ai — lives in a Middleware and not in the Deployment.
+
+THE GROUP IS `hanzo.ai`, AND THAT IS NOT A STYLE CHOICE. Both
+`ingressroutes.hanzo.ai` and `ingressroutes.traefik.io` are installed on
+hanzo-k8s, which makes the group look interchangeable. It is not. Measured
+2026-07-29: sign.hanzo.ai answers 302 to https://esign.hanzo.ai/ from a
+Middleware in the `hanzo.ai` group, while `commerce-root-redirect` — the one
+object in `traefik.io` — describes a redirect that DOES NOT HAPPEN
+(commerce.hanzo.ai/ returns 200, not the 302 its regex specifies). hanzoai/ingress
+serves its own group; the upstream group is inert here. So the chart emits one
+group and offers no way to ask for the other: a values key to pick would be a
+second mechanism for one concern, and one of its two settings is a silent no-op.
+
+The `spec` is passed through VERBATIM rather than modelled key by key. Traefik
+already owns that schema; restating it in Helm would be a second, always-stale
+copy of somebody else's API, and every field it failed to anticipate would be
+silently unexpressible. The chart contributes what it is actually authoritative
+about — the object's name, its namespace and the fleet's label set.
+*/}}
+{{- range .Values.routes }}
+---
+apiVersion: hanzo.ai/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: routing
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- toYaml .spec | nindent 2 }}
+{{- end }}
+{{- range .Values.middlewares }}
+---
+apiVersion: hanzo.ai/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: routing
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- toYaml .spec | nindent 2 }}
+{{- end }}

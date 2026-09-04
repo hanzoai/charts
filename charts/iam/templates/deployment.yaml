@@ -1,125 +1,86 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "hanzo-iam.fullname" . }}
-  labels:
-    {{- include "hanzo-iam.labels" . | nindent 4 }}
+  name: {{ include "iam.fullname" . }}
+  labels: {{- include "iam.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ .Values.replicas }}
+  {{- if eq .Values.store.backend "sqlite" }}
+  # One SQLite writer on one volume: the new pod starts after the old one stops.
+  strategy:
+    type: Recreate
   {{- end }}
   selector:
-    matchLabels:
-      {{- include "hanzo-iam.selectorLabels" . | nindent 6 }}
+    matchLabels: {{- include "iam.selector" . | nindent 6 }}
   template:
     metadata:
+      labels: {{- include "iam.labels" . | nindent 8 }}
       {{- with .Values.podAnnotations }}
-      annotations:
-        {{- toYaml . | nindent 8 }}
+      annotations: {{- toYaml . | nindent 8 }}
       {{- end }}
-      labels:
-        {{- include "hanzo-iam.selectorLabels" . | nindent 8 }}
     spec:
-      {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
+      serviceAccountName: {{ include "iam.serviceAccountName" . }}
+      {{- with .Values.pullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "hanzo-iam.serviceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
-        - name: {{ .Chart.Name }}
-          securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        - name: iam
+          image: {{ include "iam.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - serve
+            - --store={{ .Values.store.backend }}
+            {{- if eq .Values.store.backend "sqlite" }}
+            - --db={{ .Values.store.path }}
+            {{- else }}
+            - --sql-addr={{ required "store.sqlAddr is required for sql and datastore" .Values.store.sqlAddr }}
+            {{- end }}
+            - --http=http://:{{ .Values.ports.http }}
+            - --zap=:{{ .Values.ports.zap }}
+            - --ops=:{{ .Values.ports.ops }}
+            {{- with .Values.args }}{{- toYaml . | nindent 12 }}{{- end }}
+          {{- with .Values.env }}
+          env: {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - name: http
-              containerPort: 8080
-              protocol: TCP
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 10
-            periodSeconds: 10
+              containerPort: {{ .Values.ports.http }}
+            - name: zap
+              containerPort: {{ .Values.ports.zap }}
+            - name: ops
+              containerPort: {{ .Values.ports.ops }}
           readinessProbe:
             httpGet:
-              path: /ready
-              port: http
-            initialDelaySeconds: 5
+              path: /readyz
+              port: ops
             periodSeconds: 5
-          env:
-            - name: BASE_URL
-              value: {{ .Values.config.baseUrl | quote }}
-            - name: SESSION_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "hanzo-iam.fullname" . }}-secrets
-                  key: session-secret
-            - name: SESSION_TTL
-              value: {{ .Values.config.session.ttl | quote }}
-            - name: DATABASE_HOST
-              value: {{ include "hanzo-iam.databaseHost" . }}
-            - name: DATABASE_PORT
-              value: "5432"
-            - name: DATABASE_NAME
-              value: {{ .Values.postgresql.auth.database | default .Values.externalDatabase.database | quote }}
-            - name: DATABASE_USER
-              value: {{ .Values.postgresql.auth.username | default .Values.externalDatabase.username | quote }}
-            - name: DATABASE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "hanzo-iam.fullname" . }}-secrets
-                  key: database-password
-            - name: REDIS_HOST
-              value: {{ include "hanzo-iam.redisHost" . }}
-            - name: REDIS_PORT
-              value: "6379"
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "hanzo-iam.fullname" . }}-secrets
-                  key: redis-password
-            {{- if .Values.config.oauth.github.enabled }}
-            - name: GITHUB_CLIENT_ID
-              value: {{ .Values.config.oauth.github.clientId | quote }}
-            - name: GITHUB_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "hanzo-iam.fullname" . }}-oauth
-                  key: github-client-secret
-            {{- end }}
-            {{- if .Values.config.oauth.google.enabled }}
-            - name: GOOGLE_CLIENT_ID
-              value: {{ .Values.config.oauth.google.clientId | quote }}
-            - name: GOOGLE_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "hanzo-iam.fullname" . }}-oauth
-                  key: google-client-secret
-            {{- end }}
-            - name: EMAIL_PROVIDER
-              value: {{ .Values.config.email.provider | quote }}
-            - name: EMAIL_FROM
-              value: {{ .Values.config.email.from | quote }}
-            - name: EMAIL_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "hanzo-iam.fullname" . }}-secrets
-                  key: email-api-key
-                  optional: true
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
-      {{- with .Values.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: ops
+            periodSeconds: 15
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          {{- if and .Values.storage.enabled (eq .Values.store.backend "sqlite") }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ dir .Values.store.path }}
+          {{- end }}
+      {{- if and .Values.storage.enabled (eq .Values.store.backend "sqlite") }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.storage.existingClaim | default (printf "%s-data" (include "iam.fullname" .)) }}
       {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
       {{- end }}

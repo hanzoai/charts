@@ -1,0 +1,63 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "app.name" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "app.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: {{ .Values.serviceMonitor.port | default (first .Values.ports).name }}
+      path: {{ .Values.serviceMonitor.path }}
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}
+{{- if .Values.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "app.name" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  {{- /* An app's policy selects that app, which is what almost every caller wants.
+       A policy that governs the NAMESPACE states its own selector — `{}` for every
+       pod — because there is no app to select. */}}
+  podSelector:
+    {{- /* hasKey, not truthiness: `{}` is the selector that means EVERY pod, and it
+         is also falsy, so an `if` on the value alone silently renders the app's own
+         selector instead — a namespace-wide policy that governs one absent pod. */}}
+    {{- if hasKey .Values.networkPolicy "podSelector" }}
+    {{- toYaml .Values.networkPolicy.podSelector | nindent 4 }}
+    {{- else }}
+    matchLabels:
+      {{- include "app.selectorLabels" . | nindent 6 }}
+    {{- end }}
+  policyTypes:
+    - Ingress
+    {{- if .Values.networkPolicy.egress }}
+    - Egress
+    {{- end }}
+  {{- /* No rules is a DENY, and that is the honest default here: with neither an
+       explicit list nor a port to derive one from, `- ports:` would emit a rule with
+       no ports and no from — which allows everything from anywhere, the exact
+       opposite of what an empty policy reads as. */}}
+  ingress:
+    {{- if .Values.networkPolicy.ingress }}
+    {{- toYaml .Values.networkPolicy.ingress | nindent 4 }}
+    {{- else if .Values.ports }}
+    - ports:
+        {{- range .Values.ports }}
+        - port: {{ .containerPort }}
+          protocol: {{ .protocol | default "TCP" }}
+        {{- end }}
+    {{- else }} []
+    {{- end }}
+  {{- with .Values.networkPolicy.egress }}
+  egress:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
