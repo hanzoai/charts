@@ -6,7 +6,7 @@ replicaCount: 3  # Minimum for threshold
 image:
   repository: ghcr.io/hanzoai/mpc
   pullPolicy: Always
-  tag: "latest"
+  tag: ""
 
 service:
   type: ClusterIP
@@ -14,9 +14,8 @@ service:
 
 ingress:
   enabled: true
-  className: nginx
+  className: ""
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
     - host: mpc.hanzo.ai
       paths:

@@ -1,0 +1,161 @@
+{{- if .Values.ports -}}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- /* The Service name defaults to the app name (which comes from the values
+       FILENAME), because for almost every service the two are the same. They are
+       not always: a workload adopted from hand-applied manifests often carries a
+       Service named something else entirely — hanzo-mpc runs Deployment
+       `mpc-dashboard` behind Service `mpc-dashboard-svc`.
+
+       Without this key such a workload cannot be migrated faithfully.
+       serviceAliases can ADD the real name but cannot suppress the primary (it is
+       gated on `.Values.ports`, and emptying that would drop the containerPorts
+       too), so the render gains a second Service nothing routes to — an object
+       that exists only because the chart could not say the true name.
+
+       `default` is safe here where it was not for ports[].expose: this value is a
+       STRING, so the falsy case is "" and falling back to the app name is exactly
+       what an empty override should mean. Cf. the expose comment below, where
+       `default` on a BOOLEAN silently turned `false` into `true`. */}}
+  name: {{ .Values.service.name | default (include "app.name" .) }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    {{- /* Legacy bare `app` key. Kept because older NetworkPolicies and a few
+           hand-written selectors still match on it; dropping it is a separate,
+           auditable change from this migration. */}}
+    app: {{ include "app.name" . }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  {{- if .Values.service.headless }}
+  clusterIP: None
+  {{- end }}
+  {{- /* internalTrafficPolicy: Local — "route me to the agent on MY node".
+         Added for a per-node DaemonSet whose whole value is a warm node-local
+         cache: the default round-robin sends a client to any node's daemon, so
+         with N daemons a repo's cache mount is found 1/N of the time and the
+         cache stops being warm precisely because it is shared badly. Local
+         makes the choice deterministic, and cache locality is then a property
+         of the topology rather than of luck.
+
+         ⚠️ Local DROPS traffic when the client's node has no ready endpoint —
+         it does not fall back to a remote one. That is the correct failure for
+         a node agent (a silent cross-node hop would look like a cache miss
+         forever), but it means the DaemonSet must cover every node a client can
+         be scheduled onto. Check that before setting this.
+
+         Meaningless on a headless Service: with clusterIP None there is no
+         kube-proxy VIP to apply a policy to, and the client resolves endpoints
+         itself. Set one or the other, not both. */}}
+  {{- with .Values.service.internalTrafficPolicy }}
+  internalTrafficPolicy: {{ . }}
+  {{- end }}
+  {{- /* No container, no selector — an endpoint-less Service, which is a real
+         object and not a mistake. The static-site plane needs exactly one: the
+         staticFiles middleware is terminal (it never calls next), so the route
+         schema demands a backend that is never reached. A selector matching no
+         pods would be the same thing with a false claim attached. */}}
+  {{- if include "app.hasWorkload" . }}
+  selector:
+    {{- include "app.selectorLabels" . | nindent 4 }}
+  {{- end }}
+  ports:
+    {{/* `expose: false` keeps a containerPort OFF this Service while leaving it on the
+         pod. A container port is not automatically a service endpoint: SeaweedFS runs
+         master, filer and volume in one pod but publishes each on its OWN Service, so
+         listing every containerPort here would also put filer on s3:8888 beside
+         s3-filer:8888 — a second route nobody asked for, on the storage layer.
+         Defaults to true, so every existing values file renders unchanged. */}}
+    {{- range .Values.ports }}
+    {{- if or (not (hasKey . "expose")) .expose }}
+    - {{- with .name }}
+      name: {{ . }}
+      {{- end }}
+      port: {{ .servicePort | default .containerPort }}
+      targetPort: {{ .targetPort | default .containerPort }}
+      protocol: {{ .protocol | default "TCP" }}
+      {{- with .nodePort }}
+      nodePort: {{ . }}
+      {{- end }}
+    {{- end }}
+    {{- end }}
+    {{/* service.extraPorts is the exact INVERSE of ports[].expose: a port on the
+         Service that is NOT a container port. Both exist because the two lists are
+         not the same list, and a `ports[]` entry can only ever describe one of each
+         — it takes ONE name and yields one containerPort and one servicePort.
+
+         lux's explorer is what needs it. Live publishes three service ports over
+         two container ports — http:80, http-v2:8090 and ui:3000 against `api` on
+         8090 and the sidecar's 3000 — and the container port is named `api`, which
+         is what its probes reference, while no service port is. That cannot be
+         spelled with `ports[]` at all: two entries both on 8090 is invalid,
+         because (containerPort, protocol) must be unique within a pod.
+
+         With both flags it is exact: `ports[]` carries containerPort `api` with
+         expose:false, and the three service ports come from here.
+
+         targetPort is a NUMBER or a container port NAME, and is the one field that
+         has to be right — a name that no container declares makes kubelet fail
+         strconv.Atoi and the pod never goes Ready. */}}
+    {{- range .Values.service.extraPorts }}
+    - name: {{ required "service.extraPorts[].name is required" .name }}
+      port: {{ required "service.extraPorts[].port is required" .port }}
+      targetPort: {{ .targetPort | default .port }}
+      protocol: {{ .protocol | default "TCP" }}
+      {{- with .nodePort }}
+      nodePort: {{ . }}
+      {{- end }}
+    {{- end }}
+{{- range .Values.serviceAliases }}
+{{/* An alias is a second name for the same pods. Two shapes, because there are two
+     real cases and they are not the same thing:
+
+       - a STRING  — a rename in flight, or a compatibility name another service
+         still dials. Same selector, same ports, no new workload.
+
+       - an OBJECT {name, ports} — a second name exposing a DIFFERENT port set on
+         the same pods. SeaweedFS is the case that forced this: s3, s3-master and
+         s3-filer all select app=s3 but publish 9000/18901, 9333/19333/29333 and
+         8888/18888 respectively. Copying the parent's ports would have produced
+         three identical Services and silently dropped the master and filer
+         endpoints, which is worse than not migrating — the names would resolve
+         and answer on the wrong ports.
+
+     Ports default to the parent's, so every existing string alias renders exactly
+     as before. */}}
+{{- $alias := . }}
+{{- $aliasName := . }}
+{{- $aliasPorts := $.Values.ports }}
+{{- if kindIs "map" . }}
+  {{- $aliasName = .name }}
+  {{- $aliasPorts = .ports | default $.Values.ports }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ required "serviceAliases[].name is required" $aliasName }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+    app: {{ include "app.name" $ }}
+spec:
+  type: {{ $.Values.service.type }}
+  {{- if include "app.hasWorkload" $ }}
+  selector:
+    {{- include "app.selectorLabels" $ | nindent 4 }}
+  {{- end }}
+  ports:
+    {{- range $aliasPorts }}
+    - {{- with .name }}
+      name: {{ . }}
+      {{- end }}
+      port: {{ .servicePort | default .containerPort }}
+      targetPort: {{ .targetPort | default .containerPort }}
+      protocol: {{ .protocol | default "TCP" }}
+    {{- end }}
+{{- end }}
+{{- end }}

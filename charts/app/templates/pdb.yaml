@@ -1,0 +1,42 @@
+{{- if .Values.pdb.enabled -}}
+{{/* A PDB whose budget cannot be met by the replica count blocks every drain.
+     One replica with maxUnavailable 0 is the classic way to wedge a node
+     upgrade forever, so refuse it at render time rather than at 3am.
+
+     minAvailable is that same wedge written the other way round, and it is the
+     spelling that gets through: the spec below PREFERS minAvailable, so
+     `minAvailable: 1` on a single replica renders a budget of zero allowed
+     disruptions while the maxUnavailable guard sees nothing to object to. It
+     reads like the safe direction — asking for one pod to stay up — which is
+     why it is the one people reach for on a singleton. Both spellings are
+     checked, because a guard with a hole is worse than no guard: it certifies
+     the case it cannot see. */}}
+{{- if and (eq (int .Values.replicas) 1) (eq (toString .Values.pdb.maxUnavailable) "0") -}}
+{{- fail "pdb.maxUnavailable=0 with replicas=1 permanently blocks node drains — set replicas>1 or maxUnavailable=1" -}}
+{{- end -}}
+{{- if .Values.pdb.minAvailable -}}
+{{- $min := toString .Values.pdb.minAvailable -}}
+{{- if hasSuffix "%" $min -}}
+{{- if eq $min "100%" -}}
+{{- fail "pdb.minAvailable=100% leaves zero allowed disruptions and permanently blocks node drains — lower it" -}}
+{{- end -}}
+{{- else if ge (int .Values.pdb.minAvailable) (int .Values.replicas) -}}
+{{- fail (printf "pdb.minAvailable=%s with replicas=%d leaves zero allowed disruptions and permanently blocks node drains — raise replicas above minAvailable, or use maxUnavailable" $min (int .Values.replicas)) -}}
+{{- end -}}
+{{- end -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "app.name" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.pdb.minAvailable }}
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "app.selectorLabels" . | nindent 6 }}
+{{- end }}

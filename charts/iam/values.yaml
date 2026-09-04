@@ -1,141 +1,60 @@
-# Hanzo IAM - Identity and Access Management
-# Default values
+# One IAM per org boundary. The store is embedded SQLite by default; point
+# store.backend at sql or datastore to use hanzoai/sql over ZAP instead.
 
-replicaCount: 2
+replicas: 1
 
 image:
   repository: ghcr.io/hanzoai/iam
+  # Empty tag follows Chart.appVersion. Set digest to pin exactly.
+  tag: ""
+  digest: ""
   pullPolicy: IfNotPresent
-  tag: ""  # Defaults to Chart appVersion
 
-imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
+pullSecrets: []
 
-serviceAccount:
-  create: true
-  annotations: {}
-  name: ""
+store:
+  # sqlite | sql | datastore
+  backend: sqlite
+  # ZAP address of hanzoai/sql, for sql and datastore.
+  sqlAddr: ""
+  # Path of the SQLite file inside the volume.
+  path: /data/iam.db
 
-podAnnotations: {}
-podSecurityContext:
-  fsGroup: 1000
+ports:
+  http: 8080
+  zap: 9653
+  ops: 9090
 
-securityContext:
-  runAsNonRoot: true
-  runAsUser: 1000
-  capabilities:
-    drop:
-      - ALL
+# IAM_ISSUER, IAM_ISSUER_MAP and the rest. Environment-specific values live in
+# the universe repo; the chart adds none of its own.
+env: []
 
-service:
-  type: ClusterIP
-  port: 8080
+# Extra flags for iam serve.
+args: []
 
-ingress:
+storage:
   enabled: true
-  className: nginx
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-  hosts:
-    - host: hanzo.id
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: hanzo-iam-tls
-      hosts:
-        - hanzo.id
+  existingClaim: ""
+  size: 10Gi
+  class: ""
 
 resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
   requests:
     cpu: 100m
     memory: 128Mi
+  limits:
+    memory: 512Mi
 
-autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
+service:
+  type: ClusterIP
+  annotations: {}
 
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
-
-# IAM-specific configuration
-config:
-  # Base URL for the IAM service
-  baseUrl: https://hanzo.id
-
-  # Session configuration
-  session:
-    secret: ""  # Auto-generated if empty
-    ttl: 86400  # 24 hours
-
-  # OAuth providers
-  oauth:
-    github:
-      enabled: true
-      clientId: ""
-      clientSecret: ""
-    google:
-      enabled: true
-      clientId: ""
-      clientSecret: ""
-    gitlab:
-      enabled: false
-      clientId: ""
-      clientSecret: ""
-
-  # Email configuration
-  email:
-    provider: resend  # resend, sendgrid, smtp
-    from: noreply@hanzo.ai
-    apiKey: ""
-
-  # Rate limiting
-  rateLimit:
-    enabled: true
-    windowMs: 900000  # 15 minutes
-    max: 100
-
-# Database configuration
-postgresql:
-  enabled: true
-  auth:
-    username: hanzo
-    password: ""  # Auto-generated if empty
-    database: hanzo_iam
-  primary:
-    persistence:
-      enabled: true
-      size: 10Gi
-
-# Cache configuration
-redis:
-  enabled: true
-  auth:
-    enabled: true
-    password: ""  # Auto-generated if empty
-  master:
-    persistence:
-      enabled: true
-      size: 1Gi
-
-# External database (if postgresql.enabled is false)
-externalDatabase:
-  host: ""
-  port: 5432
-  username: ""
-  password: ""
-  database: ""
-  sslMode: require
-
-# External cache (if redis.enabled is false)
-externalRedis:
-  host: ""
-  port: 6379
-  password: ""

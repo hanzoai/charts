@@ -11,7 +11,7 @@ controller:
   replicaCount: 1
 
   image:
-    repository: hanzozt/zt-controller
+    repository: docker.io/hanzozt/zt-controller
     pullPolicy: IfNotPresent
     tag: ""
 
@@ -22,10 +22,8 @@ controller:
 
   ingress:
     enabled: true
-    className: nginx
+    className: ""
     annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-prod
-      nginx.ingress.kubernetes.io/ssl-passthrough: "true"
     hosts:
       - host: zt-api.hanzo.ai
         paths:
@@ -63,7 +61,7 @@ router:
   replicaCount: 2
 
   image:
-    repository: hanzozt/zt-router
+    repository: docker.io/hanzozt/zt-router
     pullPolicy: IfNotPresent
     tag: ""
 
@@ -94,7 +92,7 @@ console:
   enabled: true
 
   image:
-    repository: hanzozt/zt-console
+    repository: docker.io/hanzozt/zt-console
     pullPolicy: IfNotPresent
     tag: ""
 
@@ -104,9 +102,8 @@ console:
 
   ingress:
     enabled: true
-    className: nginx
+    className: ""
     annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-prod
     hosts:
       - host: zt.hanzo.ai
         paths:

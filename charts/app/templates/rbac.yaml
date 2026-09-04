@@ -1,0 +1,93 @@
+{{/*
+ServiceAccount and the roles bound to it.
+
+A service that READS THE CLUSTER could not be chart-native before this template:
+`serviceAccountName` let the chart point a pod at an identity it did not own, so
+migrating such a service moved the Deployment to the chart and left the
+ServiceAccount, ClusterRole and binding behind in infra/k8s. Deleting that raw
+manifest would then strip the permissions the workload reads through — the
+Deployment keeps running and every API call it makes starts returning Forbidden,
+which is worse than a crash because it degrades silently.
+
+Three services need it: kube-state-metrics (8 ClusterRole rules over the whole
+cluster), ingress, and metrics.
+
+`rbac.create` is opt-in. Most services in this fleet talk to no API server at all
+and must NOT acquire an identity just because the template exists — an unused
+ServiceAccount is a mountable token nobody audits.
+
+SCOPE IS EXPLICIT, never inferred. `rbac.clusterRules` grants cluster-wide read;
+`rbac.rules` grants namespace-only. A service that names neither gets a
+ServiceAccount and no permissions, which is the correct default for a workload
+that only needs a stable identity. There is deliberately no "give me everything"
+switch: the rules a service needs are part of its declaration and belong in review
+next to its image.
+*/}}
+{{- if .Values.rbac }}
+{{- $sa := include "app.serviceAccountName" . }}
+{{- if .Values.rbac.create }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $sa }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+  {{- with .Values.rbac.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- with .Values.rbac.clusterRules }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $sa }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+rules:
+  {{- toYaml . | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $sa }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $sa }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $sa }}
+    namespace: {{ $.Release.Namespace }}
+{{- end }}
+{{- with .Values.rbac.rules }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $sa }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+rules:
+  {{- toYaml . | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $sa }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $sa }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $sa }}
+    namespace: {{ $.Release.Namespace }}
+{{- end }}
+{{- end }}

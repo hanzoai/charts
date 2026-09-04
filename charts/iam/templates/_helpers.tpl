@@ -1,14 +1,8 @@
-{{/*
-Expand the name of the chart.
-*/}}
-{{- define "hanzo-iam.name" -}}
+{{- define "iam.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{/*
-Create a default fully qualified app name.
-*/}}
-{{- define "hanzo-iam.fullname" -}}
+{{- define "iam.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -21,62 +15,36 @@ Create a default fully qualified app name.
 {{- end }}
 {{- end }}
 
-{{/*
-Create chart name and version as used by the chart label.
-*/}}
-{{- define "hanzo-iam.chart" -}}
+{{- define "iam.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{/*
-Common labels
-*/}}
-{{- define "hanzo-iam.labels" -}}
-helm.sh/chart: {{ include "hanzo-iam.chart" . }}
-{{ include "hanzo-iam.selectorLabels" . }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-{{- end }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
-{{- end }}
-
-{{/*
-Selector labels
-*/}}
-{{- define "hanzo-iam.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "hanzo-iam.name" . }}
+{{- define "iam.selector" -}}
+app.kubernetes.io/name: {{ include "iam.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
-{{/*
-Create the name of the service account to use
-*/}}
-{{- define "hanzo-iam.serviceAccountName" -}}
+{{- define "iam.labels" -}}
+helm.sh/chart: {{ include "iam.chart" . }}
+{{ include "iam.selector" . }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{- define "iam.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "hanzo-iam.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "iam.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
 
-{{/*
-Database host
-*/}}
-{{- define "hanzo-iam.databaseHost" -}}
-{{- if .Values.postgresql.enabled }}
-{{- printf "%s-postgresql" (include "hanzo-iam.fullname" .) }}
-{{- else }}
-{{- .Values.externalDatabase.host }}
-{{- end }}
-{{- end }}
-
-{{/*
-Redis host
-*/}}
-{{- define "hanzo-iam.redisHost" -}}
-{{- if .Values.redis.enabled }}
-{{- printf "%s-redis-master" (include "hanzo-iam.fullname" .) }}
-{{- else }}
-{{- .Values.externalRedis.host }}
-{{- end }}
+{{/* Image: a digest pins exactly and wins over the tag; the tag falls back to appVersion. */}}
+{{- define "iam.image" -}}
+{{- $tag := default .Chart.AppVersion .Values.image.tag -}}
+{{- if .Values.image.digest -}}
+{{ .Values.image.repository }}:{{ $tag }}@{{ .Values.image.digest }}
+{{- else -}}
+{{ .Values.image.repository }}:{{ $tag }}
+{{- end -}}
 {{- end }}

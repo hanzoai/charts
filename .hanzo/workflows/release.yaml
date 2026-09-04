@@ -1,0 +1,86 @@
+name: Release
+
+# Publishes charts/* to oci.hanzo.ai/charts on the native runners — the registry
+# the fleet pulls charts from by version. A version is published ONCE: if the
+# registry already holds it with identical content the chart is skipped, and if
+# the content differs the job fails, because a released version that does not
+# match its source is worse than an unpublished one.
+#
+# Auth: OCI_USER / OCI_TOKEN — org Actions secrets; identity hanzo-registry,
+# which IAM grants pull+push on charts/*.
+
+on:
+  push:
+    branches: [main]
+    paths: ['charts/**', '.hanzo/workflows/release.yaml']
+  workflow_dispatch:
+
+concurrency:
+  group: charts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: [hanzo-build-linux-amd64]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install helm
+        env:
+          HELM_VERSION: v3.16.3
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" -o /tmp/helm.tgz
+          tar -xzf /tmp/helm.tgz -C /tmp linux-amd64/helm
+          install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+          helm version --short
+
+      - name: Lint and render every chart against each values file
+        run: |
+          set -euo pipefail
+          for c in charts/*/; do
+            helm lint "$c"
+            for f in "$c"values-*.yaml; do
+              [ -f "$f" ] || continue
+              helm template check "$c" -f "$f" >/dev/null
+            done
+          done
+
+      - name: Publish each chart whose version is not already released
+        env:
+          OCI_USER: ${{ secrets.OCI_USER }}
+          OCI_TOKEN: ${{ secrets.OCI_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OCI_USER:-}" ] || [ -z "${OCI_TOKEN:-}" ]; then
+            echo "::error::OCI_USER/OCI_TOKEN are not set — no chart can be published."
+            exit 1
+          fi
+          printf '%s' "${OCI_TOKEN}" | tr -d '\r\n' \
+            | helm registry login oci.hanzo.ai -u "${OCI_USER}" --password-stdin
+          mkdir -p /tmp/charts
+          for c in charts/*/; do
+            name=$(awk '/^name:/{print $2; exit}' "$c/Chart.yaml")
+            ver=$(awk '/^version:/{print $2; exit}' "$c/Chart.yaml")
+            echo "== ${name} ${ver}"
+            if helm show chart "oci://oci.hanzo.ai/charts/${name}" --version "${ver}" >/dev/null 2>&1; then
+              rm -rf "/tmp/pub/${name}"; mkdir -p "/tmp/pub/${name}"
+              helm pull "oci://oci.hanzo.ai/charts/${name}" --version "${ver}" \
+                --untar --untardir "/tmp/pub/${name}" >/dev/null 2>&1
+              if diff -r -q "$c" "/tmp/pub/${name}/${name}" >/dev/null 2>&1; then
+                echo "   already released, content identical"; continue
+              fi
+              echo "::error::${name} ${ver} is already published and its content differs from this tree. Bump version: in ${c}Chart.yaml."
+              diff -r -q "$c" "/tmp/pub/${name}/${name}" || true
+              exit 1
+            fi
+            helm package "$c" -d /tmp/charts
+            helm push "/tmp/charts/${name}-${ver}.tgz" oci://oci.hanzo.ai/charts
+            for i in 1 2 3 4 5 6; do
+              got=$(helm show chart "oci://oci.hanzo.ai/charts/${name}" --version "${ver}" 2>/dev/null | awk '/^version:/{print $2; exit}') || true
+              [ "${got}" = "${ver}" ] && break
+              echo "   not visible yet (${i}/6)"; sleep 5
+            done
+            [ "${got:-}" = "${ver}" ] || { echo "::error::${name} ${ver} pushed but not visible"; exit 1; }
+          done

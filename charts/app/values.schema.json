@@ -1,0 +1,1348 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "hanzo/app",
+  "description": "A Hanzo service: a container, a Service, and the things every service needs.",
+  "type": "object",
+  "properties": {
+    "selectorLabels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Existing selector",
+      "description": "For adopting a workload whose immutable spec.selector is not the chart's default."
+    },
+    "configMaps": {
+      "type": "array",
+      "title": "Config files",
+      "description": "Standalone ConfigMaps this service OWNS. Use env for scalars; use this when the unit of configuration is a FILE (scrape config, dashboard, rules, script) that has to be mounted by name through volumes. Never for secrets \u2014 those go through kmsSecrets, which references KMS and carries no material. A ConfigMap change does not restart mounting pods.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "binaryData": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "immutable": {
+            "type": "boolean"
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "annotations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "containerName": {
+      "type": "string",
+      "title": "Container name",
+      "description": "Defaults to the object name. Set when an existing workload's container is named differently."
+    },
+    "chart": {
+      "type": "string",
+      "title": "Chart",
+      "description": "Chart these values target; the generator resolves charts/<chart>."
+    },
+    "cd": {
+      "type": "object",
+      "additionalProperties": false,
+      "title": "Continuous delivery",
+      "description": "Read by the fleet ApplicationSet, not by this chart. It lives here because the values file is where a service is declared, and a second file would be a second inventory to keep in step.",
+      "properties": {
+        "automated": {
+          "type": "boolean",
+          "title": "Enforce this service",
+          "description": "Off by default: the Application reports drift and nothing moves. On, CD applies git and heals drift. Only set it once this service has no App CR \u2014 the operator writes the same objects, and two controllers on one pod template is a rollout loop, not a race that settles."
+        }
+      }
+    },
+    "nameOverride": {
+      "type": "string",
+      "description": "Object name. Defaults to the release name."
+    },
+    "image": {
+      "type": "object",
+      "title": "Image",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Registry path, e.g. ghcr.io/hanzoai/www"
+        },
+        "tag": {
+          "type": "string",
+          "description": "Image tag. Also becomes the app.kubernetes.io/version label."
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^(sha256:[a-f0-9]{64})?$",
+          "description": "Pin by digest. Wins over tag."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "A container, when there is one. Omit it entirely for a declaration that owns no workload \u2014 a host list, a claim, a secret reference, a routing rule."
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "replicas": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "title": "Replicas"
+    },
+    "partOf": {
+      "type": "string",
+      "title": "Part of",
+      "description": "The product this belongs to."
+    },
+    "component": {
+      "type": "string",
+      "title": "Component",
+      "description": "Role within the product."
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "annotations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "podLabels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "podAnnotations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "strategy": {
+      "type": "string",
+      "enum": [
+        "RollingUpdate",
+        "Recreate"
+      ],
+      "title": "Update strategy",
+      "description": "Recreate for singletons holding an exclusive lock or an RWO volume."
+    },
+    "rollingUpdate": {
+      "type": "object",
+      "properties": {
+        "maxSurge": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "maxUnavailable": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "prepull": {
+      "type": "object",
+      "title": "Prepull the image onto the node before the workload needs it",
+      "description": "Under Recreate the pull happens with nothing serving. A DaemonSet in sync-wave -1 naming the same image downloads it while the old pod still answers. Opt-in: it asserts the image can run `command`.",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "workload": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "",
+            "Deployment",
+            "StatefulSet",
+            "DaemonSet"
+          ],
+          "description": "Derived from persistence when empty. DaemonSet is explicit-only \u2014 it is never derived, because 'runs on every node' is a deployment decision, not a property of the values."
+        },
+        "serviceName": {
+          "type": "string"
+        },
+        "podManagementPolicy": {
+          "type": "string",
+          "enum": [
+            "OrderedReady",
+            "Parallel"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ports": {
+      "type": "array",
+      "title": "Ports",
+      "items": {
+        "type": "object",
+        "required": [
+          "containerPort"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 15,
+            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+            "description": "Required when a Service has more than one port; Kubernetes allows a lone port to be unnamed."
+          },
+          "containerPort": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "servicePort": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "description": "Defaults to containerPort."
+          },
+          "nodePort": {
+            "type": "integer",
+            "minimum": 30000,
+            "maximum": 32767
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "TCP",
+              "UDP",
+              "SCTP"
+            ]
+          },
+          "targetPort": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "What the Service targets. Defaults to containerPort; a string targets the port by name."
+          },
+          "expose": {
+            "type": "boolean",
+            "description": "Publish this port on the main Service. Default true. false keeps it on the pod only \u2014 for a port that has its own Service (SeaweedFS master/filer/volume)."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "env": {
+      "type": "array",
+      "title": "Environment",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          },
+          "valueFrom": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "envFrom": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "command": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "args": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "resources": {
+      "type": "object",
+      "title": "Resources",
+      "properties": {
+        "requests": {
+          "$ref": "#/definitions/resourceList"
+        },
+        "limits": {
+          "$ref": "#/definitions/resourceList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "livenessProbe": {
+      "$ref": "#/definitions/probe"
+    },
+    "rbac": {
+      "type": "object",
+      "title": "Cluster access",
+      "description": "ServiceAccount and the roles bound to it, for a service that reads the API server. Opt-in: a workload that talks to no API server must not acquire an identity, because an unused ServiceAccount is a mountable token nobody audits. Scope is explicit \u2014 clusterRules grants cluster-wide, rules grants namespace-only, neither grants nothing.",
+      "additionalProperties": false,
+      "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "serviceAccountName": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "clusterRules": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "readinessProbe": {
+      "$ref": "#/definitions/probe"
+    },
+    "startupProbe": {
+      "$ref": "#/definitions/probe"
+    },
+    "defaultReadinessProbe": {
+      "type": "boolean",
+      "title": "Synthesize a readiness probe",
+      "description": "TCP check on the first port when no readinessProbe is declared."
+    },
+    "lifecycle": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "terminationGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "volumes": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "volumeMounts": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "initContainers": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "sidecars": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "serviceAccountName": {
+      "type": "string"
+    },
+    "priorityClassName": {
+      "type": "string"
+    },
+    "runtimeClassName": {
+      "type": "string",
+      "title": "Pod runtime",
+      "description": "Which kernel this pod gets. Empty = the node default (runc). 'gvisor' is the runsc user-space kernel and is the boundary for any workload that parses tenant bytes. A RuntimeClass merges its own scheduling.nodeSelector and tolerations into the pod at admission, so a values file setting this must NOT restate that node set - the two would disagree the day a dedicated pool exists, and the pod would be rejected."
+    },
+    "automountServiceAccountToken": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "title": "Mount a service-account token",
+      "description": "null (default) omits the field, so the API default applies and no existing render changes. false refuses the pod a kubeconfig it has no use for - mandatory for anything running untrusted code, where a mounted token sits inside the blast radius."
+    },
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "tolerations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "affinity": {
+      "type": "object"
+    },
+    "fsGroup": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "podSecurityContext": {
+      "type": "object"
+    },
+    "securityContext": {
+      "type": "object"
+    },
+    "enableServiceLinks": {
+      "type": "boolean",
+      "title": "Service link env vars",
+      "description": "Off for services whose name collides with an env var they read (e.g. a Service named s3 injecting S3_PORT)."
+    },
+    "topologySpread": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "maxSkew": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "topologyKey": {
+          "type": "string"
+        },
+        "whenUnsatisfiable": {
+          "type": "string",
+          "enum": [
+            "DoNotSchedule",
+            "ScheduleAnyway"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Override the primary Service's metadata.name. Defaults to the app name (the values filename). Needed when adopting a workload whose live Service is named differently, e.g. Deployment mpc-dashboard behind Service mpc-dashboard-svc."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "ClusterIP",
+            "NodePort",
+            "LoadBalancer",
+            "ExternalName"
+          ]
+        },
+        "headless": {
+          "type": "boolean"
+        },
+        "internalTrafficPolicy": {
+          "type": "string",
+          "enum": [
+            "",
+            "Cluster",
+            "Local"
+          ],
+          "description": "Local routes a client to the endpoint on its OWN node \u2014 required for a per-node DaemonSet whose cache is node-local. Drops traffic when the local node has no ready endpoint; it does not fall back. Inert on a headless Service."
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "extraPorts": {
+          "type": "array",
+          "description": "Service ports that are NOT container ports. The inverse of ports[].expose.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "port"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "port": {
+                "type": "integer"
+              },
+              "targetPort": {
+                "oneOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "description": "number or a container port NAME; a name no container declares strands kubelet"
+              },
+              "protocol": {
+                "type": "string",
+                "enum": [
+                  "TCP",
+                  "UDP",
+                  "SCTP"
+                ]
+              },
+              "nodePort": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "serviceAliases": {
+      "type": "array",
+      "title": "Alias service names",
+      "description": "A second name for the same pods. A string reuses the parent's ports (a rename in flight, or a compatibility name). An object {name, ports} publishes a DIFFERENT port set on the same pods \u2014 SeaweedFS s3-master and s3-filer are that case; copying the parent's ports would silently drop their endpoints.",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "ports": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "title": "Ingress",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "className": {
+          "type": "string"
+        },
+        "tls": {
+          "type": "boolean"
+        },
+        "clusterIssuer": {
+          "type": "string"
+        },
+        "hosts": {
+          "type": "array",
+          "description": "A string joins the one shared Ingress; a map gets its own Ingress named <app>-<host>, with its own backends and annotations.",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "hostname"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "host"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "host": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "path"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "pathType": {
+                          "type": "string",
+                          "enum": [
+                            "Prefix",
+                            "Exact",
+                            "ImplementationSpecific"
+                          ]
+                        },
+                        "service": {
+                          "type": "string"
+                        },
+                        "port": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  },
+                  "annotations": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "tls": {
+                    "type": "boolean"
+                  },
+                  "clusterIssuer": {
+                    "type": "string"
+                  },
+                  "secretName": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "secretName": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "pathType": {
+                "type": "string",
+                "enum": [
+                  "Prefix",
+                  "Exact",
+                  "ImplementationSpecific"
+                ]
+              },
+              "service": {
+                "type": "string"
+              },
+              "port": {
+                "type": "integer"
+              }
+            }
+          },
+          "description": "Shared backends for the string-shaped hosts."
+        }
+      },
+      "additionalProperties": false
+    },
+    "pdb": {
+      "type": "object",
+      "title": "Disruption budget",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "maxUnavailable": {
+          "type": [
+            "integer",
+            "string",
+            "null"
+          ]
+        },
+        "minAvailable": {
+          "type": [
+            "integer",
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "autoscaling": {
+      "type": "object",
+      "title": "Autoscaling",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "minReplicas": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxReplicas": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "targetCPUUtilizationPercentage": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 100
+        },
+        "targetMemoryUtilizationPercentage": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "additionalProperties": false
+    },
+    "persistence": {
+      "type": "object",
+      "title": "Persistence",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+(Ki|Mi|Gi|Ti)$"
+        },
+        "storageClass": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "mountPath": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "volumeClaimTemplates": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "kms": {
+      "type": "object",
+      "properties": {
+        "transport": {
+          "type": "string",
+          "enum": [
+            "zap"
+          ]
+        },
+        "zapAddr": {
+          "type": "string"
+        },
+        "resyncInterval": {
+          "type": "integer",
+          "minimum": 10
+        },
+        "projectSlug": {
+          "type": "string"
+        },
+        "envSlug": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "kmsSecrets": {
+      "type": "array",
+      "title": "Secrets (KMS references)",
+      "description": "Names a path in KMS. Never carries secret material \u2014 that is what makes this values file safe to publish.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "secretsPath"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "secretsPath": {
+            "type": "string",
+            "pattern": "^/"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Names the values to pull. Omit to pull the whole path."
+          },
+          "secretName": {
+            "type": "string"
+          },
+          "resyncInterval": {
+            "type": "integer"
+          },
+          "credentialsSecret": {
+            "type": "string"
+          },
+          "projectSlug": {
+            "type": "string"
+          },
+          "envSlug": {
+            "type": "string"
+          },
+          "creationPolicy": {
+            "type": "string",
+            "enum": [
+              "Orphan",
+              "Owner"
+            ],
+            "description": "Orphan (default) leaves the Secret when the reference goes; Owner garbage-collects it."
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "secretNamespace": {
+            "type": "string",
+            "description": "Project the resulting Secret into ANOTHER namespace. For a namespace isolated on purpose, which therefore holds no KMS machine identity to authenticate with \u2014 the operator refuses a cross-namespace credentialsRef, so the CR lives with its credential and writes the result across. Requires creationPolicy Orphan: an ownerReference cannot cross a namespace either."
+          },
+          "secretType": {
+            "type": "string",
+            "description": "Kubernetes Secret type. Opaque unless the kubelet must read it: an imagePullSecret has to be kubernetes.io/dockerconfigjson, and the kubelet SKIPS an Opaque one silently."
+          },
+          "transport": {
+            "type": "string",
+            "enum": [
+              "zap"
+            ]
+          },
+          "zapAddr": {
+            "type": "string"
+          },
+          "rename": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "literals": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "serviceMonitor": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "port": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "interval": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "ingress": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "egress": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "podSelector": {
+          "type": "object",
+          "description": "Which pods this policy governs. Defaults to the app's own selector; `{}` means every pod in the namespace, for a policy that governs the namespace rather than one app."
+        }
+      },
+      "additionalProperties": false
+    },
+    "global": {
+      "type": "object",
+      "title": "Helm globals",
+      "description": "Helm injects this into EVERY subchart's values. A chart with additionalProperties:false that omits it cannot be used as a dependency at all \u2014 the render fails with \"additional properties 'global' not allowed\" before a single template runs.",
+      "additionalProperties": true
+    },
+    "routes": {
+      "type": "array",
+      "title": "Traefik IngressRoutes",
+      "description": "Host rules with priority and middlewares, for what a plain Ingress cannot express. Rendered in the hanzo.ai group.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "spec"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spec": {
+            "type": "object",
+            "description": "Traefik's own schema, passed through verbatim."
+          },
+          "annotations": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "middlewares": {
+      "type": "array",
+      "title": "Traefik Middlewares",
+      "description": "Redirects, rewrites and rate limits referenced by routes. Rendered in the hanzo.ai group.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "spec"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spec": {
+            "type": "object",
+            "description": "Traefik's own schema, passed through verbatim."
+          },
+          "annotations": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "surgeColocation": {
+      "type": "boolean",
+      "title": "Surge co-location",
+      "description": "Pin a rolling surge pod to the node holding this app's RWO volume. Ignored under strategy Recreate or with no claim mounted; mutually exclusive with affinity."
+    },
+    "claims": {
+      "type": "array",
+      "title": "Volumes",
+      "description": "Standalone PersistentVolumeClaims, mounted by name through volumes. Not persistence, which is a StatefulSet's own claim template. A bound claim's spec is immutable except for growing storage.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "size"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string",
+            "pattern": "^[0-9]+(Ki|Mi|Gi|Ti)$"
+          },
+          "storageClass": {
+            "type": "string"
+          },
+          "accessModes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ReadWriteOnce",
+                "ReadOnlyMany",
+                "ReadWriteMany",
+                "ReadWriteOncePod"
+              ]
+            }
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "annotations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "volumeMode": {
+            "type": "string",
+            "enum": [
+              "Filesystem",
+              "Block"
+            ],
+            "description": "Defaults to Filesystem, which is what the API sets on create."
+          }
+        }
+      }
+    },
+    "e2e": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "port": {
+          "type": "integer"
+        },
+        "playwrightVersion": {
+          "type": "string"
+        },
+        "boundaryText": {
+          "type": "string"
+        },
+        "npmRegistry": {
+          "type": "string"
+        },
+        "candidateMemory": {
+          "type": "string"
+        }
+      }
+    },
+    "minReadySeconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Seconds a new pod must stay ready before it counts as available."
+    },
+    "persistentVolumeClaimRetentionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "whenDeleted": {
+          "enum": [
+            "Retain",
+            "Delete"
+          ]
+        },
+        "whenScaled": {
+          "enum": [
+            "Retain",
+            "Delete"
+          ]
+        }
+      },
+      "description": "StatefulSet only. Kubernetes defaults both to Delete; a workload holding data it cannot re-derive sets Retain."
+    },
+    "cronJobs": {
+      "type": "array",
+      "description": "CronJobs owned by this app. suspend is explicit so turning one off is a reviewable diff.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "schedule",
+          "containers"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "string"
+          },
+          "suspend": {
+            "type": "boolean"
+          },
+          "concurrencyPolicy": {
+            "enum": [
+              "Allow",
+              "Forbid",
+              "Replace"
+            ]
+          },
+          "successfulJobsHistoryLimit": {
+            "type": "integer"
+          },
+          "failedJobsHistoryLimit": {
+            "type": "integer"
+          },
+          "startingDeadlineSeconds": {
+            "type": "integer"
+          },
+          "backoffLimit": {
+            "type": "integer"
+          },
+          "activeDeadlineSeconds": {
+            "type": "integer"
+          },
+          "restartPolicy": {
+            "enum": [
+              "Never",
+              "OnFailure"
+            ]
+          },
+          "serviceAccountName": {
+            "type": "string"
+          },
+          "nodeSelector": {
+            "type": "object"
+          },
+          "tolerations": {
+            "type": "array"
+          },
+          "containers": {
+            "type": "array",
+            "minItems": 1
+          },
+          "volumes": {
+            "type": "array"
+          }
+        }
+      }
+    },
+    "migrate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeoutSeconds": {
+          "type": "integer"
+        },
+        "backoffLimit": {
+          "type": "integer"
+        },
+        "resources": {
+          "type": "object"
+        }
+      }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "resourceList": {
+      "type": "object",
+      "properties": {
+        "cpu": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "memory": {
+          "type": "string",
+          "pattern": "^[0-9]+(m|Ki|Mi|Gi|Ti)?$"
+        },
+        "ephemeral-storage": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "probe": {
+      "type": "object",
+      "properties": {
+        "httpGet": {
+          "type": "object"
+        },
+        "tcpSocket": {
+          "type": "object"
+        },
+        "exec": {
+          "type": "object"
+        },
+        "grpc": {
+          "type": "object"
+        },
+        "initialDelaySeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "successThreshold": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "terminationGracePeriodSeconds": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "anyOf": [
+    {
+      "required": [
+        "image"
+      ]
+    },
+    {
+      "required": [
+        "ports"
+      ]
+    },
+    {
+      "required": [
+        "claims"
+      ]
+    },
+    {
+      "required": [
+        "kmsSecrets"
+      ]
+    },
+    {
+      "required": [
+        "routes"
+      ]
+    },
+    {
+      "required": [
+        "middlewares"
+      ]
+    },
+    {
+      "required": [
+        "ingress"
+      ]
+    }
+  ]
+}

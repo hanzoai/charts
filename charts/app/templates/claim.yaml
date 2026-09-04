@@ -1,0 +1,59 @@
+{{/*
+Standalone PersistentVolumeClaims.
+
+`persistence` and `claims` are not two ways to say one thing — they are two different
+objects with two different lifecycles, and the difference is who owns the volume:
+
+  persistence   the WORKLOAD is stateful. The claim is a StatefulSet
+                volumeClaimTemplate, created and named by the StatefulSet, and
+                declaring it is what makes the workload a StatefulSet at all.
+
+  claims        the volume exists in its own right, and a Deployment mounts it by
+                name through `volumes`. It outlives any particular pod template,
+                survives a workload being deleted and rebuilt, and does NOT change
+                the workload kind.
+
+Every SQLite-backed service in the fleet is the second case: a single-replica
+Deployment on strategy Recreate over one ReadWriteOnce block volume. Those four
+claims were among the objects that kept the CR directory alive, because the chart
+could only express the first case.
+
+A claim's `spec` is IMMUTABLE once bound, apart from growing `resources.requests`.
+Nothing here may be edited in place for a live claim: change the storage class or
+the access mode and the apply is rejected outright. Size can only go UP, and only if
+the storage class allows expansion.
+*/}}
+{{- range .Values.claims }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml (.accessModes | default (list "ReadWriteOnce")) | nindent 4 }}
+  {{- with .storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  {{/* volumeMode is emitted, not left to the server, and that is load-bearing.
+       The API DEFAULTS it to Filesystem on create, so a bound claim always has it
+       while a render that omits it does not — and since the spec is immutable, an
+       apply that drops the field is rejected outright:
+         PersistentVolumeClaim "studio-data" is invalid: spec: Forbidden: spec is immutable
+       That left hanzo-studio permanently OutOfSync with a Healthy workload and a
+       sync retrying forever. All 92 PVCs in the cluster are Filesystem, so the
+       default matches every live claim; Block is expressible for a raw device. */}}
+  volumeMode: {{ .volumeMode | default "Filesystem" }}
+  resources:
+    requests:
+      storage: {{ required "claims[].size is required" .size }}
+{{- end }}

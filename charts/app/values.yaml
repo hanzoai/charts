@@ -1,0 +1,367 @@
+# hanzo/app — defaults.
+#
+# These keys ARE the App CRD's spec, one for one. That is deliberate: the CRD
+# already proved this is the shape of a Hanzo service across 79 of them, so the
+# migration is a move, not a redesign, and `App.spec` pastes in as values.
+#
+# Every default here reproduces what the operator emitted, so a values file
+# carrying only `image` renders the same objects the operator did.
+
+# Which chart these are values for. The generator resolves `charts/<chart>`, so
+# a service on a different chart is one word in one file rather than a second
+# directory level everyone has to learn. Inert at render time.
+chart: app
+
+# Release name is the service name. Override only outside the fleet.
+nameOverride: ""
+
+# The selector an EXISTING workload already carries, for adoption. Empty means
+# the standard name+instance pair every new service gets. spec.selector is
+# immutable, so a workload running with `app: x` can only be adopted by naming
+# that here — the alternative is recreating it for a label.
+selectorLabels: {}
+
+# Container name, when it differs from the object name. `kubectl logs -c` and
+# every probe reference use it, so an existing workload keeps the name it has
+# rather than being renamed by adoption.
+containerName: ""
+
+# A container, when there is one. An EMPTY repository means this declaration owns no
+# workload and no pod selector — which is how the chart also owns the declarations
+# that are not services: a set of Ingresses for a host list, a KMS secret reference,
+# a claim, a routing rule, a Service with nothing behind it. Those were the files in
+# the CR directory that carried no App, and the chart's insistence on a container is
+# the reason that directory outlived its purpose.
+image:
+  repository: ""
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ghcr-secret
+
+# Seconds a new pod must stay ready before it counts as available. Ten, so a
+# process that passes its probe and then dies holds the rollout instead of
+# retiring the pod that still works.
+minReadySeconds: 10
+# StatefulSet only. Default (unset) is Kubernetes' Delete for both; a workload
+# holding data it cannot re-derive sets Retain/Retain.
+persistentVolumeClaimRetentionPolicy: {}
+
+replicas: 1
+
+# Grouping labels: `partOf` is the product, `component` the role within it.
+partOf: ""
+component: ""
+labels: {}
+annotations: {}
+podLabels: {}
+podAnnotations: {}
+
+# RollingUpdate | Recreate. Recreate is correct for singletons that hold an
+# exclusive lock or a ReadWriteOnce volume — two of those overlapping corrupt
+# state, and a rolling update guarantees an overlap.
+strategy: RollingUpdate
+rollingUpdate:
+  maxSurge: 1
+  maxUnavailable: 0
+
+# Warm the image onto the node BEFORE the pod that needs it exists — see
+# templates/prepull.yaml for the mechanism and why it cannot become a second
+# writer.
+#
+# Under Recreate the pull happens with nothing serving, so it is the outage:
+# 87 of cloud's 111 measured seconds of 503 were a download. A DaemonSet in
+# sync-wave -1 naming the same image does that download while the OLD pod is
+# still up, and cd.hanzo.ai will not open wave 0 until it reports Healthy.
+#
+# OFF by default because it is a claim about the IMAGE, not about the workload:
+# the container must be able to run `command`, and an image built FROM scratch
+# or on distroless can run neither this nor anything else nameable here. A
+# prepull that cannot start never leaves Progressing, and wave -1 never opens —
+# which wedges the deploy it was added to speed up. Check the base image, then
+# turn it on.
+#
+# Ignored under RollingUpdate, where maxSurge already pulls the new image while
+# the old pod serves.
+prepull:
+  enabled: false
+  # Not the image's ENTRYPOINT. This holds the layers on the node and nothing
+  # else; see the template on why running the application here would be a
+  # second writer.
+  command: ["/bin/sh", "-c", "exec sleep 2147483647"]
+
+workload:
+  # Derived from persistence when empty. Set explicitly only to override.
+  kind: ""
+  serviceName: ""
+  podManagementPolicy: OrderedReady
+
+# name + containerPort are required; servicePort defaults to containerPort.
+ports: []
+
+env: []
+envFrom: []
+command: []
+args: []
+
+resources: {}
+
+livenessProbe: {}
+readinessProbe: {}
+startupProbe: {}
+
+# With no readinessProbe declared, synthesize a TCP check on the first port.
+# Without one a pod is "ready" before it can serve, and a rolling update drops
+# requests on the floor.
+defaultReadinessProbe: true
+
+# Five seconds of draining after SIGTERM, so in-flight requests finish and the
+# endpoint is removed from every kube-proxy before the process exits.
+lifecycle:
+  preStop:
+    exec:
+      command: ["/bin/sh", "-c", "sleep 5"]
+terminationGracePeriodSeconds: 30
+
+volumes: []
+volumeMounts: []
+initContainers: []
+
+# CronJobs owned by this app. See templates/cronjob.yaml.
+cronJobs: []
+
+
+sidecars: []
+
+# An identity the chart does NOT own — a ServiceAccount some other manifest
+# created. To have the chart create one, use `rbac` instead: declaring it is
+# now enough to attach it, which it was not before (see app.serviceAccountName
+# in _helpers.tpl). Setting both to different names fails the render.
+serviceAccountName: ""
+priorityClassName: ""
+
+# Which kernel the pod runs on. Empty = the node's default runtime (runc).
+# `gvisor` is the runsc user-space kernel, and it is what a workload parsing
+# tenant bytes runs under. It carries its own node set (see templates/workload.yaml),
+# so a values file that sets this must NOT also set nodeSelector/tolerations for
+# the same pool.
+runtimeClassName: ""
+
+# null = the field is not emitted, so the API's default (true) applies and no
+# existing pod's render changes. `false` refuses the pod a kubeconfig it has no
+# use for — correct for anything that talks to no apiserver, and mandatory for
+# anything running untrusted code, where a mounted token is a credential inside
+# the blast radius.
+automountServiceAccountToken: null
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Pin a rolling SURGE pod to the node already holding this app's ReadWriteOnce
+# volume, so it bind-mounts the attached volume instead of dead-locking on
+# Multi-Attach — a rolling update over one block volume becomes a same-host handoff.
+#
+# Only sound for a store that tolerates concurrent same-host opens (SQLite in WAL
+# mode with a busy_timeout). An exclusive-lock engine uses `strategy: Recreate`
+# instead, and this is IGNORED under Recreate or with no claim mounted, so asking for
+# it where it is unsafe yields nothing rather than a hazard. Mutually exclusive with
+# `affinity` — both write the same field, so setting both fails the render.
+surgeColocation: false
+
+fsGroup: null
+podSecurityContext: {}
+securityContext: {}
+
+# A Service named `s3` injects S3_PORT=tcp://… into every pod in its namespace,
+# which a binary reading S3_PORT as an int parses as garbage and exits. Turn
+# this off for any service whose name collides with one of its own env vars.
+enableServiceLinks: true
+
+# Best-effort spread across nodes. ScheduleAnyway, so a single-node cluster
+# still schedules.
+topologySpread:
+  enabled: true
+  maxSkew: 1
+  topologyKey: kubernetes.io/hostname
+  whenUnsatisfiable: ScheduleAnyway
+
+service:
+  type: ClusterIP
+  headless: false
+  annotations: {}
+  # name: <override>   # primary Service metadata.name; defaults to the app
+  #                    # name (the values FILENAME). Set it only when the live
+  #                    # Service is genuinely named something else.
+
+# Extra Service names pointing at the same pods — a rename in flight, or a
+# compatibility name another service still dials.
+serviceAliases: []
+
+ingress:
+  enabled: false
+  className: ingress
+  tls: true
+  # WHO ISSUES THE CERTIFICATE, and empty means NOBODY — serve TLS from a secret
+  # that already exists and ask cert-manager for nothing.
+  #
+  # That distinction has to be expressible, because secretName alone cannot make
+  # it: naming an existing secret while an issuer is still attached tells
+  # cert-manager to OWN that secret for this Ingress's hosts, and if another
+  # Certificate already owns it the request sits at IncorrectCertificate forever
+  # — a standing claim on somebody else's secret. Where that secret is a wildcard
+  # several hosts are served from, the claim is on all of them.
+  clusterIssuer: letsencrypt-prod
+  # A host is either a STRING — joins the one shared Ingress named after the app —
+  # or a MAP {host, paths?, annotations?, tls?, clusterIssuer?, secretName?}, which
+  # gets its OWN Ingress named <app>-<host>. Kubernetes forces that: annotations are
+  # per object, so a host with its own middleware chain or backend cannot share one.
+  hosts: []
+  # [{path, pathType, service, port}]. The shared default; a map-shaped host may
+  # state its own.
+  paths: []
+  annotations: {}
+  secretName: ""
+
+# Traefik routing for what a plain Ingress cannot say: rule PRIORITY between
+# routers matching one host, and MIDDLEWARE (redirect, rewrite, rate limit) in
+# front of a backend. `ingress:` above is the ordinary path and covers almost
+# everything; these are for services whose behaviour lives in a router rather
+# than in the Deployment. `spec` is Traefik's own schema, passed through
+# verbatim — see templates/route.yaml for why it is not re-modelled here, and
+# why the group is `hanzo.ai` and not `traefik.io`.
+# [{name, spec, annotations?}]
+routes: []
+middlewares: []
+
+pdb:
+  enabled: false
+  maxUnavailable: 1
+  minAvailable: null
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: null
+
+persistence:
+  enabled: false
+  size: 10Gi
+  storageClass: ""
+  # Claim name. Existing volumes are bound by name, so this must keep matching
+  # whatever the PVC is already called or the StatefulSet provisions a new one.
+  name: data
+  mountPath: /data
+
+volumeClaimTemplates: []
+
+# Standalone PersistentVolumeClaims: [{name, size, storageClass?, accessModes?,
+# labels?, annotations?}]. A volume that exists in its own right, mounted by name
+# through `volumes`, outliving any pod template — NOT the same object as
+# `persistence`, which is a StatefulSet's own claim template and is what makes a
+# workload a StatefulSet. Declaring one here does not change the workload kind.
+claims: []
+
+# Defaults shared by every entry in `kmsSecrets`. Override one only when the app
+# runs outside the platform namespace, where the credential it authenticates with
+# is its own namespace's rather than this one.
+#
+# envSlug is `prod` and there is no other. `default` is not an environment — it
+# is an Infisical-ism that leaked, and a path read at the wrong env answers
+# `total: 0`, which reads exactly like a secret that was never stored.
+kms:
+  # cloud, not kms.hanzo.svc. There is ONE KMS and it is the plugin embedded in
+  # cloud (plugin/kms -> apps/kms, mounted at /v1/kms). kms.hanzo.svc was a
+  # second DEPLOYMENT of the same luxfi/kms binary serving the same routes, and
+  # splitting the data across the two is what made secrets unfindable: a query
+  # against the wrong one returns `total: 0`, which reads exactly like a secret
+  # that was never stored.
+  #
+  # Pre-flight before this line moved, not after: all 1944 coordinates the
+  # standalone holds were copied and verified byte-identical (1957 now in cloud).
+  # The 18 that did not copy are entries the standalone itself cannot serve — it
+  # lists them and 404s its own GET — plus two that read empty; ZERO KMSSecret
+  # CRs name any of them. The routes are identical, so the operator needs no
+  # release: it already calls /v1/kms/auth/login and /v1/kms/secrets/{path}/{name}
+  # and cloud mounts exactly those.
+  #
+  # team ran on this alone for hours first, with its three keys byte-identical
+  # throughout.
+  # ZAP, not HTTP. The projector reaches cloud over the ZAP listener cloud's
+  # chart publishes as containerPort 9653. There is no default credentialsSecret
+  # because the ZAP path authenticates as a peer that carries no principal — a
+  # CR that names an identity is refused rather than served another org's
+  # material through a path that looks right.
+  transport: zap
+  zapAddr: cloud.hanzo.svc:9653
+  resyncInterval: 600
+  projectSlug: hanzo
+  envSlug: prod
+
+# [{name, secretsPath, keys[], secretName?}] — see templates/kmssecret.yaml.
+# References only. This chart has no way to carry a secret value, on purpose.
+#
+# A SECRET'S LOCATION IS DERIVED, NEVER REMEMBERED (HIP-0136). Two questions
+# answer it, and neither needs a lookup: which app READS it, and what is the
+# environment variable called?
+#
+#     hanzo/iam/IAM_SERVICE_TOKEN@prod
+#     └org┘ └app┘ └───── NAME ─────┘ └env┘
+#
+# so the whole declaration is mechanical:
+#
+#     kmsSecrets:
+#     - name: iam-env-kms-sync
+#       secretsPath: /iam            # the app that reads it. Never the secret's
+#                                    # own name, never a purpose, never a category
+#       keys: [IAM_SERVICE_TOKEN]    # the variable names, verbatim
+#       secretName: iam-env          # always <app>-env
+#
+# and the container reads `iam-env` key `IAM_SERVICE_TOKEN` — the same string it
+# is called in the code. A key that differs from its variable forces every reader
+# to carry a translation, and a translation can be wrong.
+#
+# The Secret lands in the RELEASE's namespace, so an app reads only what is synced
+# beside it. A key synced next to a different app is not available here: that is
+# how index-chat crash-looped for 18h while its key sat in another namespace.
+kmsSecrets: []
+
+serviceMonitor:
+  enabled: false
+  port: ""
+  path: /metrics
+  interval: 30s
+
+networkPolicy:
+  enabled: false
+  ingress: []
+  egress: []
+
+# Browser deploy gate: a PreSync hook boots the candidate image and drives the
+# routes with headless chromium; a thrown error or the error-boundary text on
+# any route fails the sync, so CD never replaces a working version with a
+# client-broken one. Off by default; a values file opts in with its routes.
+# Apply this release's migrations before its pods roll. Off by default: it only
+# makes sense for an app whose image ships migrations and whose database comes
+# from env alone. See templates/migrate.yaml for why it is a PreSync hook.
+migrate:
+  enabled: false
+  command: ["python", "manage.py", "migrate", "--noinput"]
+  timeoutSeconds: 1800
+  backoffLimit: 0
+  resources:
+    requests: {cpu: 200m, memory: 1Gi}
+    limits: {cpu: "2", memory: 4Gi}
+
+e2e:
+  enabled: false
+  routes: ["/"]
+  port: 3000
+  playwrightVersion: "1.61.1"
+  boundaryText: Critical Error
+  npmRegistry: https://pkg.hanzo.ai
+  candidateMemory: 1Gi

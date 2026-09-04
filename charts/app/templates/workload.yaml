@@ -1,0 +1,331 @@
+{{- if include "app.hasWorkload" . -}}
+{{- $kind := include "app.workloadKind" . -}}
+apiVersion: apps/v1
+kind: {{ $kind }}
+metadata:
+  name: {{ include "app.name" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+  {{- with .Values.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- /* A DaemonSet has no replicas: the node set IS the count. Emitting it
+         would be rejected by the API, which is why this chart could not express
+         one at all until now. */}}
+  {{- if and (not .Values.autoscaling.enabled) (ne $kind "DaemonSet") }}
+  replicas: {{ .Values.replicas }}
+  {{- end }}
+  {{- with .Values.minReadySeconds }}
+  {{- /* A pod that passes its probe is not necessarily settled. luxd needs a
+         quiet interval before it counts as available, or a rolling change can
+         take the next replica while the previous one is still stabilising. */}}
+  minReadySeconds: {{ . }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "app.selectorLabels" . | nindent 6 }}
+  {{- if eq $kind "StatefulSet" }}
+  {{- with .Values.persistentVolumeClaimRetentionPolicy }}
+  {{- /* What happens to a claim when the set is deleted or scaled in. The
+         default is Delete, which for a chain node means the ledger goes with
+         the StatefulSet — so a workload holding data it cannot re-derive sets
+         Retain here, and could not be expressed by this chart until it could. */}}
+  persistentVolumeClaimRetentionPolicy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  serviceName: {{ .Values.workload.serviceName | default (include "app.name" .) }}
+  podManagementPolicy: {{ .Values.workload.podManagementPolicy | default "OrderedReady" }}
+  updateStrategy:
+    type: {{ eq .Values.strategy "Recreate" | ternary "OnDelete" "RollingUpdate" }}
+  {{- else if eq $kind "DaemonSet" }}
+  {{- /* Same shape as a StatefulSet: updateStrategy, not strategy, and no
+         maxSurge — a DaemonSet cannot exceed one pod per node. `Recreate` maps
+         to OnDelete so a node-level agent can be rolled deliberately. */}}
+  updateStrategy:
+    type: {{ eq .Values.strategy "Recreate" | ternary "OnDelete" "RollingUpdate" }}
+  {{- else }}
+  strategy:
+    {{- if eq .Values.strategy "Recreate" }}
+    type: Recreate
+    {{- else }}
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.rollingUpdate.maxUnavailable }}
+    {{- end }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "app.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- /* A mounted ConfigMap is read at PROCESS START, and editing one restarts
+             nothing: the kubelet refreshes the file on disk and the running process
+             never looks again. So a catalog change reconciles cleanly and serves the
+             OLD catalog until something unrelated causes a rollout — which from
+             outside is indistinguishable from the change never having landed.
+
+             Hashing the rendered configMaps into a pod annotation makes the pod spec
+             change when their CONTENT does, so the Deployment rolls itself. Emitted
+             only where configMaps exist, so nothing else gains an annotation or a
+             restart it did not need. */}}
+      {{- $sum := "" }}
+      {{- with .Values.configMaps }}
+      {{- $sum = toYaml . | sha256sum }}
+      {{- end }}
+      {{- if or .Values.podAnnotations $sum }}
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if $sum }}
+        hanzo.ai/config-checksum: {{ $sum | quote }}
+        {{- end }}
+      {{- end }}
+    spec:
+      {{- with include "app.serviceAccountName" . }}
+      serviceAccountName: {{ . }}
+      {{- end }}
+      {{- /* Emitted ONLY when the values file states a boolean, because the
+             field's absence and the value `true` are the same thing to the API
+             and are NOT the same thing to a diff. Defaulting this to true in
+             values.yaml would write the field into all ~100 rendered pods that
+             do not carry it today, and every one of them would read as changed.
+             `with` cannot express this — it treats `false` as empty — so the
+             test is on the KIND, not the truthiness. */}}
+      {{- if kindIs "bool" .Values.automountServiceAccountToken }}
+      automountServiceAccountToken: {{ .Values.automountServiceAccountToken }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if not .Values.enableServiceLinks }}
+      enableServiceLinks: false
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- /* WHICH KERNEL THIS POD GETS. `gvisor` (handler runsc) is a
+             user-space kernel, and it is the boundary for anything that parses
+             tenant bytes — submitted code, a third-party language server over a
+             customer's source. Without this key the chart could not express
+             such a workload at all, which is why the first two of them were
+             heading for raw manifests outside CD.
+
+             It also carries the NODE SET, and that is why no values file here
+             restates one: RuntimeClass.scheduling merges its nodeSelector and
+             tolerations into every pod that names it, at admission. Declaring
+             the same node set a second time in a values file is not redundancy
+             — it is a second place to be wrong, and the day a dedicated pool
+             exists the two disagree and the pod is REJECTED. The node set is
+             declared once, in infra/k8s/gvisor/runtimeclass.yaml, beside the
+             DaemonSet that installs the runtime on exactly those nodes. */}}
+      {{- with .Values.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with include "app.affinity" . | trim }}
+      affinity:
+        {{- . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- with .Values.fsGroup }}
+        fsGroup: {{ . }}
+        {{- /* fsGroup makes the kubelet walk the whole volume and chown it on
+               every mount. OnRootMismatch skips the walk when the root already
+               carries the right group, which is every boot after the first —
+               the difference between a second and several minutes on a volume
+               with many files. It rides with fsGroup because it means nothing
+               without one. */}}
+        fsGroupChangePolicy: OnRootMismatch
+        {{- end }}
+        {{- with .Values.podSecurityContext }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- /* Spreading one replica across nodes is a constraint with nothing to
+             constrain. The operator only emitted this above one replica; match
+             that, or 30-odd single-replica services all show a phantom diff. */}}
+      {{- if and .Values.topologySpread.enabled (gt (int .Values.replicas) 1) }}
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.topologySpread.maxSkew }}
+          topologyKey: {{ .Values.topologySpread.topologyKey }}
+          whenUnsatisfiable: {{ .Values.topologySpread.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "app.selectorLabels" . | nindent 14 }}
+      {{- end }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- /*
+          An init container that omits `image` inherits the app's, so a container
+          running the SAME binary as the app states the version once. hanzo-git's
+          oauth-sync had to repeat `ghcr.io/hanzoai/git:<tag>` beside image.tag,
+          which is two places to bump and a silent skew when only one is —
+          an oauth-sync running a different build than the forge it syncs.
+          An init container that names its own image is unaffected: the value's
+          own keys win over the defaults.
+        */}}
+        {{- range . }}
+        {{- $c := . }}
+        {{- if not $c.image }}
+        {{- $c = merge (deepCopy $c) (dict "image" (include "app.image" $) "imagePullPolicy" $.Values.image.pullPolicy) }}
+        {{- end }}
+        - {{- toYaml $c | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.containerName | default (include "app.name" .) }}
+          image: {{ include "app.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.ports }}
+          ports:
+            {{- range . }}
+            - {{- with .name }}
+              name: {{ . }}
+              {{- end }}
+              containerPort: {{ .containerPort }}
+              protocol: {{ .protocol | default "TCP" }}
+            {{- end }}
+          {{- end }}
+          env:
+          {{- with .Values.env }}
+            {{- /* `value` is quoted explicitly rather than left to toYaml.
+                   An env value is always a string to Kubernetes, but YAML will
+                   read an unquoted one as whatever it looks like — and a
+                   contract address like 0x53141dF4… is a legal YAML 1.1
+                   integer, so it arrives at the apiserver as 474294858228…
+                   and the deploy is wrong in a way nothing warns about. */}}
+            {{- range . }}
+            - name: {{ .name }}
+              {{- if hasKey . "value" }}
+              value: {{ .value | quote }}
+              {{- end }}
+              {{- with .valueFrom }}
+              valueFrom:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+            {{- /* HANZO_VERSION is DERIVED from the image tag, exactly like the
+                   app.kubernetes.io/version label, and the operator APPENDS it
+                   into every container. It appears in no CR, so a values file
+                   generated from one never carries it — and a chart that omits
+                   it silently drops the env from every app the moment CD takes
+                   over from the operator. */}}
+            {{- with include "app.version" . }}
+            - name: HANZO_VERSION
+              value: {{ . | quote }}
+            {{- end }}
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- /* A service with no readiness probe is ready the instant the
+                 kubelet starts it, so a rolling update tears down the old pods
+                 before the new ones can serve. The operator synthesized a TCP
+                 check on the first port to close that window; dropping it here
+                 would put a rollout gap into ~30 services at once. */}}
+          {{- if .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- else if and .Values.defaultReadinessProbe .Values.ports }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ (first .Values.ports).containerPort }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 6
+          {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.lifecycle }}
+          lifecycle:
+            {{- toYaml .Values.lifecycle | nindent 12 }}
+          {{- end }}
+          {{- with concat .Values.volumeMounts (.Values.persistence.enabled | ternary (list (dict "name" .Values.persistence.name "mountPath" .Values.persistence.mountPath)) list) }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- /* A sidecar drains like the container beside it unless it names its
+               own lifecycle — the rule lives here rather than as a copy in every
+               sidecar that wants it. */}}
+        {{- range .Values.sidecars }}
+        {{- $s := . }}
+        {{- if and $.Values.lifecycle (not $s.lifecycle) }}
+        {{- $s = mergeOverwrite (deepCopy $s) (dict "lifecycle" $.Values.lifecycle) }}
+        {{- end }}
+        {{- toYaml (list $s) | nindent 8 }}
+        {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if eq $kind "StatefulSet" }}
+  volumeClaimTemplates:
+    {{- if .Values.volumeClaimTemplates }}
+    {{- toYaml .Values.volumeClaimTemplates | nindent 4 }}
+    {{- else }}
+    {{/* apiVersion and kind are spelled out because the API stores them on a
+         volumeClaimTemplate and a render that omits them never equals the live
+         object — the set stays permanently OutOfSync with a Healthy workload and
+         a sync that reports success. The explicit `volumeClaimTemplates` path
+         carries them (it is copied from live), so only this synthesised one was
+         short, and only the two services using `persistence` — kv and sql —
+         drifted while the other five StatefulSets did not. */}}
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: {{ .Values.persistence.name }}
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        {{/* Same reason as claim.yaml: the API defaults volumeMode on create, a
+             volumeClaimTemplate is immutable, and a render that omits it can never
+             match a live set. That is what kept hanzo-kv and hanzo-sql OutOfSync
+             with Healthy workloads and a sync reporting success. */}}
+        volumeMode: {{ .Values.persistence.volumeMode | default "Filesystem" }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+    {{- end }}
+  {{- end }}
+{{- end }}
