@@ -1,23 +1,27 @@
 # Hanzo Charts
 
-Helm charts for Hanzo services. Charts are the shape; the values that run
-production live in `hanzo/universe`. Every chart publishes to
+Helm charts for Hanzo services. A chart is the shape; the values that run
+production live in `hanzo/universe`. Each chart publishes to
 `oci.hanzo.ai/charts` by version, once.
 
 | Chart | What it deploys |
 |-------|-----------------|
-| `app` | The one application chart: a container, its Service, and what every service needs — ingress route, PDB, HPA, probes, KMS-backed secrets. Nearly every Hanzo service runs from it with a values file. |
-| `iam` | Hanzo IAM, one binary on an embedded store; `store.backend` selects sqlite, sql or datastore (hanzoai/sql over ZAP). |
+| `iam` | Hanzo IAM, one binary on an embedded store. `store.backend` selects `sqlite` (a kept volume), `sql` or `datastore` (hanzoai/sql over ZAP). |
 | `mpc` | Hanzo MPC node. |
-| `bootnode` | Bootnode API. Its console is a static export served by the ingress, not a container. |
+| `bootnode` | The bootnode API. Its console is a static export the ingress serves, not a container. |
 | `net` | The Zero Trust fabric: controller, routers, console. |
+
+The application chart lives in `hanzo/universe` at `charts/app`, and stays
+there: the fleet renders it from that path, and universe already publishes it
+to `oci.hanzo.ai/charts`. One chart, one publisher. Moving it here means
+universe stops publishing it in the same change, not before.
 
 Nothing here depends on an external database, cache, queue or secret store.
 Data is Hanzo Base (SQLite) embedded in the service, or hanzoai/sql, kv,
-datastore and docdb over ZAP; secrets come from Hanzo KMS. Sites are static
-builds served by hanzoai/ingress.
+datastore and docdb over ZAP; secrets come from Hanzo KMS; ingress is
+hanzoai/ingress. Images are pinned — a floating tag is not a deployable pin.
 
 ```bash
 helm install iam oci://oci.hanzo.ai/charts/iam --version 0.2.0
-helm template x charts/app -f path/to/values.yaml
+helm template x charts/iam --set store.backend=sql --set store.sqlAddr=sql.hanzo.svc:9653
 ```

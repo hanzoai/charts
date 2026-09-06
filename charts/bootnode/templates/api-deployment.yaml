@@ -26,7 +26,7 @@ spec:
       serviceAccountName: {{ include "bootnode.serviceAccountName" . }}
       containers:
         - name: api
-          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.api.image.pullPolicy }}
           ports:
             - name: http
