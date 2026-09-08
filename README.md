@@ -169,5 +169,6 @@ helm install test charts/iam --dry-run --debug
 
 ## License
 
-Apache 2.0
+MIT — see [LICENSE](./LICENSE), Copyright (c) 2024 Hanzo AI Inc.
+Estate-wide licensing standard: HIP-0137 (`hanzoai/hips`).
 
