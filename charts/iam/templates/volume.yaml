@@ -1,0 +1,19 @@
+{{- if and .Values.storage.enabled (not .Values.storage.existingClaim) }}
+# The identity graph lives in one SQLite file. One writer, one volume, kept on
+# uninstall: a store of identities is not something a chart removal deletes.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "iam.fullname" . }}-data
+  labels: {{- include "iam.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.storage.class }}
+  storageClassName: {{ .Values.storage.class }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.size }}
+{{- end }}
