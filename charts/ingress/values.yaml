@@ -29,7 +29,8 @@ providers:
     enabled: true
     configMap: ingress-dynamic     # static-site routers + host-backed services
   kubernetesCRD:
-    enabled: false                 # IngressRoute/Middleware CRDs — not installed
+    enabled: true                  # IngressRoute/Middleware CRDs (group hanzo.ai)
+    allowEmptyServices: true       # a staticFiles route names a Service nothing backs
   gateway:
     enabled: false                 # Gateway API — supported, not yet adopted
 

@@ -45,6 +45,7 @@ spec:
             {{- end }}
             {{- if .Values.providers.kubernetesCRD.enabled }}
             - --providers.kubernetescrd=true
+            - --providers.kubernetescrd.allowemptyservices={{ .Values.providers.kubernetesCRD.allowEmptyServices }}
             {{- end }}
             {{- if .Values.providers.gateway.enabled }}
             - --providers.kubernetesgateway=true
