@@ -19,3 +19,8 @@ secrets/
 # Temp
 *.tmp
 *.bak
+
+# Local symlinks to LLM.md
+CLAUDE.md
+AGENTS.md
+GEMINI.md
